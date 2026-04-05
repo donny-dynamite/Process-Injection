@@ -17,4 +17,4 @@ Me: Hey ChatGPT, list different injection techniques, and rate them top to botto
 |              | Process Doppelganging       | Use NTFS transaction features to run code from a legit-looking process image|
 | Expert       | Process Ghosting            | Similar to Doppelganging, but uses deleted files still mapped in memory     |
 |              | Early Bird Injection        | Inject code before the main thread of a process starts executing            |
-|              | Kernel Assisted Injection   | Uses kernel drivers to inject tor malipulate processes                      |
+|              | Kernel Assisted Injection   | Uses kernel drivers to inject or malipulate processes                       |
