@@ -1,5 +1,5 @@
 # Process-Injection
-_Pushing the limits of brain to not explode_
+_Pushing the limits of the mind to not implode_
 
 ```
 Hey ChatGPT, list different injection techniques, and rate them top to bottom
