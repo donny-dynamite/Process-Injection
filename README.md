@@ -2,7 +2,7 @@
 _Pushing the limits of brain to not explode_
 
 ```
-Me: Hey ChatGPT, list different injection techniques, and rate them top to bottom
+Hey ChatGPT, list different injection techniques, and rate them top to bottom
 ```
 
 | Difficulty   | Technique                   | Description                                                                 |
