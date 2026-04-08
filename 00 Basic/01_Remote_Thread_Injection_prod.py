@@ -14,11 +14,6 @@ Steps:
 - Confirm payload written correctly            -> ReadProcessMemory()
 - Create a new thread, and execute payload     -> CreateRemoteThread()
 - Resume original thread                       -> ResumeThread()
-
-
-TODO:
-- check for system architecture (for payloads)
-- better confirmation of correct payload-write (a == b) vs hashing
 """
 
 
@@ -61,7 +56,13 @@ DETACHED_PROCESS    = 0x08
 CREATE_SUSPENDED    = 0x04
 
 
-# for SuspendThread() and ResumeThread() calls
+# for IsWow64Process2()
+IMAGE_FILE_MACHINE_UNKNOWN  = 0x0
+IMAGE_FILE_MACHINE_I386     = 0x014c    # x86
+IMAGE_FILE_MACHINE_AMD64    = 0x8664    # x64
+
+
+# for SuspendThread() / ResumeThread()
 INVALID_DWORD = 0xFFFFFFFF
 
 
@@ -179,6 +180,13 @@ kernel32.GetExitCodeThread.argtypes = [
 ]
 kernel32.GetExitCodeThread.restype = wintypes.BOOL
 
+
+kernel32.IsWow64Process2.argtypes = [
+    wintypes.HANDLE,                    # hProcess
+    ctypes.POINTER(wintypes.USHORT),    # [o] pProcessMachine
+    ctypes.POINTER(wintypes.USHORT),    # [o] pNativeMachine (opt)
+]
+kernel32.IsWow64Process2.restype = wintypes.BOOL
 
 kernel32.ReadProcessMemory.argtypes = [
     wintypes.HANDLE,                    # hProcess
@@ -354,6 +362,50 @@ def create_process(
 
 
 
+def check_system_arch(hProcess: wintypes.HANDLE) -> None:
+    """
+    Check system arch, and see if process is running as native/non-emulated
+    - pProcessMachine, what process is running as
+    - pNativeMachine, what system actually is
+    
+    To confirm that payload/shellcode is suitable for system/host
+    """
+    
+    pProcessMachine = wintypes.USHORT()
+    pNativeMachine  = wintypes.USHORT()
+    
+    print(f"\n[+] Architecture check -> IsWow63Process2()")
+    
+    if not kernel32.IsWow64Process2(
+            hProcess,
+            ctypes.byref(pProcessMachine),
+            ctypes.byref(pNativeMachine)
+    ):
+        raise winerr()
+
+    ARCH_MAP = {
+        IMAGE_FILE_MACHINE_UNKNOWN: "UNKNOWN",
+        IMAGE_FILE_MACHINE_I386:    "x86 (32-bit)",
+        IMAGE_FILE_MACHINE_AMD64:   "x64 (64-bit)",
+    }
+
+    proc_val = pProcessMachine.value
+    machine_val = pNativeMachine.value
+    
+    proc_str = ARCH_MAP.get(proc_val, f"Unknown ({hex(proc_val)})")
+    machine_str = ARCH_MAP.get(machine_val, f"Unknown ({hex(machine_val)})")
+    
+    is_native = (proc_val == IMAGE_FILE_MACHINE_UNKNOWN)
+    
+    print(f"-> Machine arch: {machine_str}")
+    print(f"-> Process arch is native, not WOW64 (True/False): {is_native}")
+
+    if proc_val != IMAGE_FILE_MACHINE_UNKNOWN:  
+        raise RuntimeError("Cannot inject x64 payload into WOW64 (32-bit) process")
+
+
+
+
 def thread_suspend_check(hThread: wintypes.HANDLE) -> None:
 
     """
@@ -462,7 +514,7 @@ def confirm_payload_write(
     print("\n[+] Confirming payload written to memory -> ReadProcessMemory()")
 
     nSize = len(payload)
-                           
+
     lpBuffer = ctypes.create_string_buffer(nSize)
     bytes_read = ctypes.c_size_t()
 
@@ -485,7 +537,7 @@ def confirm_payload_write(
 def  modify_memory_protection(
     hProcess: wintypes.HANDLE,
     lpAddress: wintypes.LPVOID,
-    dwSize: int=len(payload),
+    dwSize: int,
     flNewProtect: int=PAGE_EXECUTE_READ
 ) -> int:
 
@@ -583,7 +635,7 @@ def wait_timer(hThread: wintypes.HANDLE, dwMilliseconds: int=5000) -> wintypes.D
 
     """
     Wait for a thread/process handle to be in signaled state
-    - determine if safe for memory to be freed -> VirtualFreeEx()
+    - determine if it is safe for memory to be freed -> VirtualFreeEx()
     """
 
     print(f"\n[+] Checking thread synchronisation -> WaitForSingleObject()")
@@ -611,7 +663,9 @@ def wait_timer(hThread: wintypes.HANDLE, dwMilliseconds: int=5000) -> wintypes.D
 
 def get_thread_exit_code(hThread: wintypes.HANDLE) -> None:
 
-    """ Retrieve termination status of given thread """
+    """ 
+    Retrieve termination status of given thread
+    """
 
     print(f"\n[+] Retrieving thread termination status -> GetExitCodeThread()")
     
@@ -639,7 +693,9 @@ def resume_orig_process(
     dwProcessId: wintypes.DWORD
 ) -> None:
     
-    """ Resume execution of original process/thread """
+    """
+    Resume execution of original process/thread
+    """
 
     print(f"\n[+] Resuming original thread:")
     print(f"-> ProcessId: {dwProcessId}")
@@ -669,13 +725,12 @@ def free_allocated_memory(
     if wait_status == WAIT_OBJECT_0:
         if not kernel32.VirtualFreeEx(hProcess, lpBaseAddress, dwSize, dwFreeType):
             raise winerr()
-        print(f"-> Successful, memory freed at: {hex(lpBaseAddress.value)}")
+        print(f"-> Successful, memory freed at: {hex(lpBaseAddress)}")
         return True
 
     elif wait_status == WAIT_TIMEOUT:
         print(f"-> Thread still running - skipping free to avoid crash. Status: {wait_status}")
         return False
-
     else:
         print(f"-> Unsuccessful, unable to release memory. Status: {wait_status}")
         return False
@@ -692,6 +747,9 @@ def free_allocated_memory(
 # ----------------------------------
 # create process, return handle/Ids to thread/process
 hThread, hProcess, dwThreadId, dwProcessId = create_process(flags=CREATE_SUSPENDED)
+
+# check if process is 64-bit/native, and not WOW64
+check_system_arch(hProcess)
 
 # check suspend state of thread
 thread_suspend_check(hThread)
