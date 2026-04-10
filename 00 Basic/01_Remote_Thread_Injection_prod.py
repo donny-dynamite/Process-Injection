@@ -301,9 +301,9 @@ def create_process(
 ) -> tuple[wintypes.HANDLE, wintypes.HANDLE,
            wintypes.DWORD, wintypes.DWORD]:
 
-    hdr = "\n >>>>    Creating Process -> CreateProcessW()    <<<<\n"
+    hdr = "\n >>>>    Creating SUSPENDED Process -> CreateProcessW()    <<<<\n"
     print("\n" + "-"*len(hdr) + hdr + "-" *len(hdr))
-    
+
 
     # define args
     lpApplicationName = app
