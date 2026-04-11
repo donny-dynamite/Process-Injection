@@ -591,7 +591,7 @@ def  modify_memory_protection(
 
 def create_remote_thread(
     hProcess: wintypes.HANDLE,
-    lpBaseAddress: wintypes.LPVOID,
+    lpStartAddress: wintypes.LPVOID,
 ) -> wintypes.HANDLE:
 
     """
@@ -606,7 +606,6 @@ def create_remote_thread(
 
     lpThreadAttributes = None
     dwStackSize = 0
-    lpStartAddress = lpBaseAddress
     lpParameter = None
     dwCreationFlags = 0 # thread runs immediately after creation
     lpThreadId = wintypes.DWORD()
@@ -782,7 +781,7 @@ pause_execute_payload()
 # Execute injected payload, validate execution
 # ----------------------------------
 # create/execute remote thread
-hThread_new = create_remote_thread(hProcess, lpBaseAddress)
+hThread_new = create_remote_thread(hProcess, lpStartAddress=lpBaseAddress)
 
 
 
