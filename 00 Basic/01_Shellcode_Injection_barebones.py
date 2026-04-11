@@ -1,5 +1,5 @@
 """
-Proof of Concept (barebones): Process Injection via CreateRemoteThread() (notepad.exe)
+(barebones) Shellcode injection into notepad.exe
 - for x64 process on x64 systems
 
 Steps:
