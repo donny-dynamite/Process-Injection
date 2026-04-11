@@ -27,7 +27,7 @@ lpStartAddress (3rd arg) == LoadLibraryW address
 lpParameter (4th arg) == lpBaseAddress from VirtualAllocEx()
 - tells thread "for first argument, look at lpBaseAddress, where path-string to dummy.dll was written
 - notepad.exe then runs LoadLibraryW("c:\path_to\dummy.dll")
-
+- (in shellcode injection, this is == None)
 
 dummy.dll to spawn cmd.exe (cpp file compiled)
 ----------------------------------------------
