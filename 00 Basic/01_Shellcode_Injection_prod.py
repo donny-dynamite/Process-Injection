@@ -1,5 +1,5 @@
 """
-Proof of Concept: Process Injection via CreateRemoteThread() (notepad.exe)
+Proof of Concept: Shellcode injection into notepad.exe
 - x64 process on x64 systems
 
 Payloads shellcode:
