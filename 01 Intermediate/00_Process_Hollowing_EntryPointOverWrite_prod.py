@@ -11,6 +11,8 @@ However current workaround actually works.....
 -> notepad.exe spawns suspended, shellcode written to spawn calc.exe
 -> finally, python.exe -> notepad.exe, with calc.exe spawned as orphaned process
 
+Note: NOPs and endless-loop appended to shellcode to prove concept
+
 Works, but is messy
 - not sure if technically 'Process Hollowing'
 - NtUnmapViewOfSection() not called on target process, but OEP overwrite workaround
