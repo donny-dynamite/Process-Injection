@@ -1,13 +1,12 @@
 """
-Process Hollowing (variant): Original Entry Point (OEP) Overwriting
+Thread Hijacking via Original Entry Point Overwriting in a Suspended Process
 
 Steps:
 - create suspended process -> CreateProcessW()
 - overwrite OEP/entry_point_va address with shellcode
 - redirect/initial Instruction Pointer to point to new entry point
 
-Note: to be honest, I don't know if this could be considered hollowing, but whatever
-- as this preserves rest of original PE structure (of suspended process)
+Note: not entirely sure where this sits exactly and its part hollowing, part thread hijacking
 """
 import ctypes
 from ctypes import wintypes
