@@ -1,5 +1,5 @@
 """
-(barebones) DLL injection into notepad.exe
+(barebones) DLL injection into notepad.exe, via CreateRemoteThread()
 
 
 Steps:
