@@ -10,8 +10,8 @@ Hey ChatGPT, list different injection techniques, and rate them top to bottom
 ```
 | Difficulty   | Technique                   | Description                                                                 |
 ---------------|-----------------------------|-----------------------------------------------------------------------------|
-| Basic        | DLL Injection               | DLL injected into a target process using standard OS functions              |
-|              | Shellcode Injection         | Shellcode written into another process, executed via new thread             |
+| Basic        |✅ DLL Injection            | DLL injected into a target process using standard OS functions              |
+|              |✅ Shellcode Injection      | Shellcode written into another process, executed via new thread             |
 | Intermediate | Process Hollowing           | Start legit process, remove its memory, replace with malicious PE file      |
 |              | APC Injection               | Queue malicious code to run when a thread enters an alertable state         |
 |              | Thread Hijacking            | Suspends an existing thread, and re-directs execution                       | 
