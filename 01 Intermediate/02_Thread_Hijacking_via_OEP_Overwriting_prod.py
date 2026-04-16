@@ -1,10 +1,10 @@
 """
-Thread Hijacking via Original Entry Point Overwriting in a Suspended Process
+(prod) Thread Hijacking via overwriting Original Entry Point in a Suspended Process
 
 Steps:
 - create suspended process -> CreateProcessW()
 - overwrite OEP/entry_point_va address with shellcode
-- redirect/initial Instruction Pointer to point to new entry point
+- redirect Instruction Pointer to new entry point
 
 Note: not entirely sure where this sits exactly, as it is part hollowing, part thread hijacking
 """
