@@ -1,8 +1,9 @@
 # Process-Injection
 
+
 Each folder contains a number of scripts to demonstrate concept
 - __barebones_ -> minimal comments, no constants/structs/functions error handling etc
-- __prod_ -> attempt at 'production' code, with above, plus context managers, user prompts, etc
+- __prod_ -> attempt at 'production' code, with above plus prototypes, user prompts, etc
 
 ```
 Hey ChatGPT, list different injection techniques, and rate them top to bottom
