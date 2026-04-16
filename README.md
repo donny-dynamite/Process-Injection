@@ -22,8 +22,8 @@ Hey ChatGPT, list different injection techniques, and rate them top to bottom
 |              | Early Bird Injection        | Inject code before the main thread of a process starts executing            |
 |              | Kernel Assisted Injection   | Uses kernel drivers to inject or malipulate processes                       |
 
-**Note on table:** Difficulty, is in terms of stealthiness and ability of a given technique to be detected
-- **NOT** in terms of coding complexity, ie
+**Note on table:** Difficulty, is in terms of stealthiness and ability of a given technique to evade detection
+- Difficulty is **NOT** in terms of coding complexity, ie
 
 Early Bird Injection (Expert)
 - just another variant of APC injection 
