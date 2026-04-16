@@ -6,7 +6,7 @@ Steps:
 - overwrite OEP/entry_point_va address with shellcode
 - redirect/initial Instruction Pointer to point to new entry point
 
-Note: not entirely sure where this sits exactly and its part hollowing, part thread hijacking
+Note: not entirely sure where this sits exactly, as it is part hollowing, part thread hijacking
 """
 import ctypes
 from ctypes import wintypes
