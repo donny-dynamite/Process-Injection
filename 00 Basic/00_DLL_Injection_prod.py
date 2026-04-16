@@ -1,5 +1,5 @@
 """
-(prod) DLL injection into notepad.exe
+(prod) DLL injection into notepad.exe, via CreateRemoteThread()
 
 
 Steps
