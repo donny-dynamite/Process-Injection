@@ -400,8 +400,8 @@ ntdll.NtUnmapViewOfSection.restype = ctypes.c_long
 
 # --------------- PE parser helper functions ---------------
 #
-# [DOS Header] e_lfanew ---   [DOS Stub]   --> [PE Header]
-#                          \_ _ _ _ _ _ _ _/
+# [DOS Header: e_lfanew] ---\    [DOS Stub]   /--> [PE Header]
+#                            \_ _ _ _ _ _ _ _/
 #
 # e_lfanew ->   [PE Signature       - 4 bytes]
 #               [File Header        - 20 bytes]
@@ -609,7 +609,7 @@ def get_img_base_addr(hProcess: wintypes.HANDLE) -> ctypes.c_void_p:
     - PebBaseAddress is a pointer to where PEB starts in memory
     - at offset 0x10 (from PebBaseAddress), sits ImageBaseAddress
     - read PEB at PebBaseAddress + OFFSET <- ReadProcessMemory()
-        
+
     Glossary
     - PBI, Process Basic Information (struct)
     - PEB, Process Environment Block (struct)
@@ -617,11 +617,11 @@ def get_img_base_addr(hProcess: wintypes.HANDLE) -> ctypes.c_void_p:
 
     # Step 1: populate PBI struct
     print(f"\n[+] Retrieving Process Basic Information: NtQueryInformationProcess()")
-    
+
     pbi = PROCESS_BASIC_INFORMATION()
     pi_len = ctypes.c_ulong()
     ProcessInformationClass = 0 # return ProcessBasicInformation
-    
+
     status = ntdll.NtQueryInformationProcess(
         hProcess,
         ProcessInformationClass, 
