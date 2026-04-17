@@ -1,13 +1,19 @@
 # Process-Injection
 
+<p align="center">Allocate  ➡️  Write ➡️  Execute</p>
+
+--------------------------------------------------------------------------------------------------------
 
 Each folder contains a number of scripts to demonstrate concept
-- __barebones_ -> minimal comments, no constants/structs/functions error handling etc
+- __barebones_ -> minimal code to ensure execution, no constants/structs/functions error handling etc
 - __prod_ -> attempt at 'production' code, with above plus prototypes, user prompts, etc
 
+--------------------------------------------------------------------------------------------------------
 ```
-Hey ChatGPT, list different injection techniques, and rate them top to bottom
+> ChatGPT, list different injection techniques, and rate them top to bottom
 ```
+<br>
+
 | Difficulty   | Technique                   | Description                                                                 |
 ---------------|-----------------------------|-----------------------------------------------------------------------------|
 | Basic        |✅ DLL Injection            | DLL injected into a target process using standard OS functions              |
@@ -22,17 +28,22 @@ Hey ChatGPT, list different injection techniques, and rate them top to bottom
 |              |✅ Early Bird Injection        | Inject code before the main thread of a process starts executing            |
 |              | Kernel Assisted Injection   | Uses kernel drivers to inject or malipulate processes                       |
 
+<br>
+
 **Note on table:** Difficulty, is in terms of stealthiness and ability of a given technique to evade detection
 - Difficulty is **NOT** in terms of coding complexity, ie
 
-Early Bird Injection (Expert)
+<br>
+
+<ins>Early Bird Injection (Expert)</ins>
 - just another variant of APC injection 
 - barebones < 100 lines, quick and very easy to implement
 
 
-Process Hollowing (Intermediate)
-- hundreds of lines of code
-- requires manually padding CONTEXT64 struct to ensure correct struct memory-size, and registers at correct offsets
-- requires taking snapshot of CPU registers and ensuring Rip and Rsp are perfectly aligned on 16-byte memory boundaries
-- requires fixing IAT...
+<ins>Process Hollowing (Intermediate)</ins>
+- hundreds of lines of code, requiring the following:
+- manual parsing of PE-payload based on known pointer offsets and field values
+- padding CONTEXT64 struct to ensure correct struct memory-size, and registers at correct offsets
+- taking snapshot of CPU registers and ensuring Rip and Rsp are perfectly aligned on 16-byte memory boundaries
+- fixing IAT...
 - too many hacks required to get things perfectly aligned in memory
