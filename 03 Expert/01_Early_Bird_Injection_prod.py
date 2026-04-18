@@ -5,8 +5,8 @@
 - payload: shellcode, to spawn calc.exe
 
 
-Note: there is barely any difference with this and vanilla APC (Asynchronous Procedure Call) injection
-- here injected process starts SUSPENDED -> guaranteed to hit alert signal on resumption
+Note: the main difference with vanilla APC injection is the state of the injected process
+- here, injected process starts SUSPENDED -> guaranteed to hit alert signal on resumption
 - in vanilla APC injection, process already started -> chance process won't signal
 
 
