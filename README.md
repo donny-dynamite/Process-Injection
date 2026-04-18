@@ -46,4 +46,4 @@ Each folder contains a number of scripts to demonstrate concept
 - padding CONTEXT64 struct to ensure correct struct memory-size, and registers at correct offsets
 - taking snapshot of CPU registers and ensuring Rip and Rsp are perfectly aligned on 16-byte memory boundaries
 - fixing IAT...
-- too many hacks required to get things perfectly aligned in memory
+- too many hacks required to get things perfectly aligned in memory 🫠
