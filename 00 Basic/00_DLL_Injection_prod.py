@@ -61,11 +61,12 @@ dll_path = r"c:\path_to_compiled\dummy.dll"
 payload = dll_path.encode("utf-16le") + b"\x00\x00"
 
 
-
-
 # ----------------------------------
 # CONSTANTS
 # ----------------------------------
+
+# specify Target Process to hollow/hijack
+TARGET_PROCESS = r"c:\windows\system32\notepad.exe"
 
 # for CreateProcessW() - samples
 CREATE_NEW_CONSOLE  = 0x10
@@ -291,24 +292,18 @@ kernel32.WriteProcessMemory.restype = wintypes.BOOL
 # Function Definitions
 # ----------------------------------
 
+# --------------- Misc helper functions ---------------
 def winerr() -> OSError:
     """ Return a ctypes.WinError() with the last Windows API error """
 
     return ctypes.WinError(ctypes.get_last_error())
 
-
-
-
 def pause_execute_payload() -> None:
     """ Pause until user key press (any) """
 
-    msg = "\n\n[!] WARNING: About to execute payload in new thread: Press any key to continue..."
-    print(msg, end='', flush=True)
+    print(f"\n\n[!] WARNING: About to execute payload in new thread: Press any key to continue...", end='')
     msvcrt.getch()
     print()
-
-
-
 
 def close_handle(handle: wintypes.HANDLE, name: str="Handle") -> None:
     """ Close open handles, to avoid resource leaks """
@@ -325,11 +320,12 @@ def close_handle(handle: wintypes.HANDLE, name: str="Handle") -> None:
         print(f"Successful")
 
 
+# ------------------------------------------------------------
 
 
 def create_process(
-    app: str=r"c:\windows\system32\notepad.exe",
-    flags: int=None
+    app: str=TARGET_PROCESS
+    flags: int==CREATE_SUSPENDED
 ) -> tuple[wintypes.HANDLE, wintypes.HANDLE,
            wintypes.DWORD, wintypes.DWORD]:
 
@@ -801,9 +797,7 @@ def free_allocated_memory(
 # Create Suspended Process (notepad.exe)
 # ----------------------------------
 # create process, return handle/Ids to thread/process
-hThread, hProcess, dwThreadId, dwProcessId = create_process(flags=CREATE_SUSPENDED)
-
-
+hThread, hProcess, dwThreadId, dwProcessId = create_process()
 
 # check if process is 64-bit/native, and not WOW64
 check_system_arch(hProcess)
