@@ -26,7 +26,7 @@ Steps:
 6: Execute, Resume Thread										-> ResumeThread()
 
 
-dummy.dll to spawn cmd.exe (cpp file compiled)
+dummy.dll to spawn cmd.exe (cpp file to be compiled)
 ----------------------------------------------
 #include <windows.h>
 #include <stdlib.h>
