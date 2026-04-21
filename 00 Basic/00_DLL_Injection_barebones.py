@@ -1,24 +1,10 @@
 """
 (barebones) DLL injection into notepad.exe, via CreateRemoteThread()
+- LoadLibraryW() used to load .dll, which is passed as an argument into CreateRemoteThread()
 
 
-Steps:
-------
-- Create SUSPENDED process                          -> CreateProcessW()
-
-[+] Prep DLL information
-- Allocate memory                                   -> VirtualAllocEx()
-- Write payload (DLL path) into allocated memory    -> WriteProcessMemory()
-
-[+] Find address to LoadLibraryW
-- Create a new thread, and execute payload          -> CreateRemoteThread()
-- Resume original thread                            -> ResumeThread()
-
-
-Overview (differences between Shellcode Injection)
----------------------------------------------------
-[+] Path to dll (as string),  written as 'payload' -> WriteProcessMemory()
-
+Note:
+-----
 [+] CreateRemoteThread()
 lpStartAddress (3rd arg) == LoadLibraryW address
 - here you tell notepad.exe "Start a new thread at the address of LoadLibraryW"
@@ -29,8 +15,19 @@ lpParameter (4th arg) == lpBaseAddress from VirtualAllocEx()
 - notepad.exe then runs LoadLibraryW("c:\path_to\dummy.dll")
 - (in shellcode injection, this is == None)
 
-dummy.dll to spawn cmd.exe (cpp file compiled)
-----------------------------------------------
+
+Steps:
+------
+1: Create SUSPENDED process                          			-> CreateProcessW()
+2: Allocate memory for .dll                          			-> VirtualAllocEx()
+3: Write payload (DLL path, as string) into allocated memory    -> WriteProcessMemory()
+4: Locate Virtual Address for LoadLibraryW() within kernel32.dll
+5: Create remote thread, pointing to LoadLibrary() as loader    -> CreateRemoteThread()
+6: Execute, Resume Thread										-> ResumeThread()
+
+
+dummy.dll to spawn cmd.exe (cpp file to be compiled)
+----------------------------------------------------
 #include <windows.h>
 #include <stdlib.h>
 
