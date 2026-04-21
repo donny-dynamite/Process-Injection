@@ -22,7 +22,7 @@ Steps:
 2: Allocate memory for .dll                          			-> VirtualAllocEx()
 3: Write payload (DLL path, as string) into allocated memory    -> WriteProcessMemory()
 4: Locate Virtual Address for LoadLibraryW() within kernel32.dll
-5: Create remote thread, pointing to LoadLibrary() as loader    -> CreateRemoteThread()
+5: Create remote thread, pointing to LoadLibraryW() as loader    -> CreateRemoteThread()
 6: Execute, Resume Thread										-> ResumeThread()
 
 
