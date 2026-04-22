@@ -27,7 +27,7 @@ Even though debug_cpu_registers() shows registers are at expected offsets
 - still issues with ctypes potential truncation of 64-bit values and padding/alignment
 
 To skip manualy calculating offsets and padding in order to align register values:
-- a 1232-byte buffer created instead
+- a 1232-byte buffer created instead, and populated with register information
 - data packed/unpacked from known offsets for Instruction and Stack pointers
 
 
