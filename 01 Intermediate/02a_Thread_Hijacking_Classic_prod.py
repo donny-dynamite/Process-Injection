@@ -19,13 +19,16 @@ Current payload uses an infinite loop (\xeb\xfe -> jmp $)
 CONTEXT64 struct vs manual packing/unpacking from 1232-byte buffer
 ------------------------------------------------------------------
 CONTEXT64 struct created and kept here for posterity
-- however even simple infinite-loop payload would cause 0xc0000005 Access Violation issues (crash -> WerFault -> viewable in Application Event Logs)
+- however even simple infinite-loop payload would cause 0xc0000005 Access Violation issues 
+  ie crash -> WerFault -> viewable in Application Event Logs
 - even on custom un-protected (!CFG) victim.exe binary that just spawns threads
 
 Even though debug_cpu_registers() shows registers are at expected offsets
 - still issues with ctypes potential truncation of 64-bit values and padding/alignment
 
-To skip manualy calculating offsets and padding in order to align register values, a 1232-byte buffer created instead, and data packed/unpacked from known expected offset values for the Instruction and Stack pointers.
+To skip manualy calculating offsets and padding in order to align register values:
+- a 1232-byte buffer created instead
+- data packed/unpacked from known offsets for Instruction and Stack pointers
 
 
 Steps
