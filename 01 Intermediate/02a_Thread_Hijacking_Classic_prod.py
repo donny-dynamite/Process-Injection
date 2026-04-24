@@ -8,8 +8,8 @@
 
 Admission:
 ----------
-- I am by no means proficient with shellcode
-- Google AI used extensively to generate required working payload -> create_payload_cowboy()
+- I am by no means proficient with shellcode, at all
+- Google AI used extensively to generate required working shellcode -> create_payload_cowboy()
 - as msfvenom generated payloads appeared to be stomping registers, even with EXITFUNC=thread set
 
 
@@ -18,6 +18,9 @@ Notes:
 - finally a working solution -> payload executes effectively, does NOT crash parent process
 - addresses three-body problem: alignment -> state preservation -> stack hygiene
 - previous crashes were due to 0xc0000005 Access Violations, verifiable via Application Event Logs
+- issues with attempting to repeat thread-hijack in same process -> best to restart process, or choose another
+- due to the way non-main thread is selected (ie, second oldest) -> very likely that same thread will be hijacked on repeated attempts
+- subsequent attempts will likely NOT launch shellcode (but process will still operate normally)
 
 
 CONTEXT64 struct vs manual packing/unpacking from 1232-byte buffer
