@@ -20,7 +20,7 @@ Each folder contains a number of scripts to demonstrate concept
 |              |✅ Shellcode Injection      | Shellcode written into another process, executed via new thread             |
 | Intermediate | Process Hollowing           | Start legit process, remove its memory, replace with malicious PE file      |
 |              |✅ APC Injection               | Queue malicious code to run when a thread enters an alertable state         |
-|              | Thread Hijacking            | Suspends an existing thread, and re-directs execution                       | 
+|              |✅ Thread Hijacking            | Suspends an existing thread, and re-directs execution                       | 
 | Advanced     | Reflective DLL Injection    | Loads a DLL directly from memory without touching disk                      |
 |              | Manual Mapping              | Fully custom loading of a module into memory (no OS loader)                 |
 |              | Process Doppelganging       | Use NTFS transaction features to run code from a legit-looking process image|
