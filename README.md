@@ -1,6 +1,6 @@
 # Process-Injection
 
-<p align="center">Allocate  ➡️  Write ➡️  Execute</p>
+<p align="center">Selection ➡️ Allocation  ➡️  Write ➡️  Execution</p>
 
 --------------------------------------------------------------------------------------------------------
 
