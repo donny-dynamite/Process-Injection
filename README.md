@@ -1,12 +1,12 @@
 # Process-Injection
 
-<p align="center">Selection ➡️ Allocation  ➡️  Write ➡️  Execution</p>
+<p align="center">Selection ➡️ Allocation  ➡️  Injection ➡️  Execution</p>
 
 --------------------------------------------------------------------------------------------------------
 
 Each folder contains a number of scripts to demonstrate concept
-- __barebones_ -> minimal code to ensure execution, no constants/structs/functions error handling etc
 - __prod_ -> attempt at 'production' code, with above plus prototypes, user prompts, etc
+- __barebones_ -> minimal code to ensure execution, no constants/structs/functions error handling etc _(optional, depending on complexity of technique)_
 
 --------------------------------------------------------------------------------------------------------
 ```
