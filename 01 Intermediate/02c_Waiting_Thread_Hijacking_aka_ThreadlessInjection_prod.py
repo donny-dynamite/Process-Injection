@@ -19,7 +19,9 @@ This technique attempts to be more stealthy, by avoiding 'noisy' API calls such 
 Caveats
 -------
 - execution of shellcode may not happen immediately, unless thread wakes up (can force it by manipulating/using application)
-- if targeting the same process multiple times (eg notepad.exe) shellcode execution will only occur on the first run. subsequent attempts will likely target the same thread, and shellcode will not execute again due to stack shift. shellcode does not currently take this into account, so if the same application is to be targeted, it will need to be restarted in between attempts
+- if targeting the same process multiple times (eg notepad.exe) shellcode execution will only occur on the first run 
+  subsequent attempts will likely target the same thread, and shellcode will not execute again due to stack shift
+  shellcode does not currently take this into account, so if the same application is to be targeted, it will need to be restarted in between attempts
 
 
 WTH Steps
