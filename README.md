@@ -1,9 +1,10 @@
-# Process-Injection
+<h1 align="center"> Process-Injection </h1>
 
 <p align="center">Selection ➡️ Allocation  ➡️  Injection ➡️  Execution</p>
 
 --------------------------------------------------------------------------------------------------------
-Classifying various PI methods is typically based on the Execution technique, though not always so obvious, eg:
+Classifying various PI methods is typically based on the Execution technique, though not always so obvious. As such trying to place different techniques/methods can be difficult, as each stage has numerous techniques that can be mixed and matched in various combinations.
+
 
 **Waiting Thread Hijacking via Module Stomping**
 
@@ -17,7 +18,6 @@ Classifying various PI methods is typically based on the Execution technique, th
 - Injection -> LoadLibraryW()
 - Execution -> CreateRemoteThread()
 
-Classification of the different methods can be difficult, as various techniques at each stage can be mixed and matched in various combinations
 
 
 --------------------------------------------------------------------------------------------------------
