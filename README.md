@@ -3,7 +3,7 @@
 <p align="center">Selection ➡️ Allocation  ➡️  Injection ➡️  Execution</p>
 
 --------------------------------------------------------------------------------------------------------
-Classification of the various process injection methods is typically based on the Execution technique, though not always so obvious, eg:
+Classifying various PI methods is typically based on the Execution technique, though not always so obvious, eg:
 
 **Waiting Thread Hijacking via Module Stomping**
 
