@@ -3,10 +3,22 @@
 <p align="center">Selection ➡️ Allocation  ➡️  Injection ➡️  Execution</p>
 
 --------------------------------------------------------------------------------------------------------
+Classification of the various process injection methods is typically based on the Execution technique, though not always so obvious, eg:
 
-Each folder contains a number of scripts to demonstrate concept
-- __prod_ -> attempt at 'production' code, with above plus prototypes, user prompts, etc
-- __barebones_ -> minimal code to ensure execution, no constants/structs/functions error handling etc _(optional, depending on complexity of technique)_
+**Waiting Thread Hijacking via Module Stomping**
+
+- Allocation -> Module Stomping
+- Injection -> WriteProcessMemory()
+- Execution -> Waiting Thread Hijacking
+
+**Classic DLL injection**
+
+- Allocation -> VirtualAllocEx()
+- Injection -> LoadLibraryW()
+- Execution -> CreateRemoteThread()
+
+Classification of the different methods can be difficult, as various techniques at each stage can be mixed and matched in various combinations
+
 
 --------------------------------------------------------------------------------------------------------
 ```
@@ -35,11 +47,6 @@ Each folder contains a number of scripts to demonstrate concept
 
 <br>
 
-<ins>Early Bird Injection (Expert)</ins>
-- just another variant of APC injection 
-- barebones < 100 lines, quick and very easy to implement
-
-
 <ins>Process Hollowing (Intermediate)</ins>
 - hundreds of lines of code, requiring the following:
 - manual parsing of PE-payload based on known pointer offsets and field values
@@ -47,3 +54,10 @@ Each folder contains a number of scripts to demonstrate concept
 - taking snapshot of CPU registers and ensuring Rip and Rsp are perfectly aligned on 16-byte memory boundaries
 - fixing IAT...
 - too many hacks required to get things perfectly aligned in memory 🫠
+
+<ins>Early Bird Injection (Expert)</ins>
+- just another variant of APC injection 
+- barebones < 100 lines, quick and very easy to implement
+
+
+
