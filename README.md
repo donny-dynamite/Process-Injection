@@ -3,24 +3,10 @@
 <p align="center">Selection ➡️ Allocation  ➡️  Injection ➡️  Execution</p>
 
 --------------------------------------------------------------------------------------------------------
-Classifying various PI methods is typically based on the Execution technique, though not always so obvious. As such trying to place different techniques/methods can be difficult, as each stage has numerous techniques that can be mixed and matched in various combinations.
-
-
-**Waiting Thread Hijacking via Module Stomping**
-
-- Allocation -> Module Stomping
-- Injection -> WriteProcessMemory()
-- Execution -> Waiting Thread Hijacking
-
-**Classic DLL injection**
-
-- Allocation -> VirtualAllocEx()
-- Injection -> LoadLibraryW()
-- Execution -> CreateRemoteThread()
 
 
 
---------------------------------------------------------------------------------------------------------
+
 ```
 > ChatGPT, list different injection techniques, and rate them top to bottom
 ```
@@ -58,6 +44,23 @@ Classifying various PI methods is typically based on the Execution technique, th
 <ins>Early Bird Injection (Expert)</ins>
 - just another variant of APC injection 
 - barebones < 100 lines, quick and very easy to implement
+
+--------------------------------------------------------------------------------------------------------
+
+Classifying various PI methods is typically based on the Execution technique, though not always so obvious. As such trying to place different techniques/methods can be difficult, as each stage has numerous techniques that can be mixed and matched in various combinations.
+
+
+**Waiting Thread Hijacking via Module Stomping**
+
+- Allocation -> Module Stomping
+- Injection -> WriteProcessMemory()
+- Execution -> Waiting Thread Hijacking
+
+**Classic DLL injection**
+
+- Allocation -> VirtualAllocEx()
+- Injection -> LoadLibraryW()
+- Execution -> CreateRemoteThread()
 
 
 
