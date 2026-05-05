@@ -937,7 +937,7 @@ def get_handle_to_loaded_module(hProcess: wintypes.HANDLE, target_dll: str) -> w
 
 def find_code_cave(
     hProcess: wintypes.HANDLE,
-    hModule: wintypes.handle,
+    hModule: wintypes.HANDLE,
     module_name: str,
     payload_size: int) -> int:
 
@@ -981,7 +981,7 @@ def modify_memory_permissions(hProcess: wintypes.HANDLE, lpAddress: int, dwSize:
     # ----- modify memory protection -----
     lpflOldProtect = wintypes.DWORD()
 
-    print(f"\n[+] Modifying memory protection:
+    print(f"\n[+] Modifying memory protection:")
     if not kernel32.VirtualProtectEx(hProcess, lpAddress, dwSize, flNewProtect, ctypes.byref(lpflOldProtect)):
         raise winerr()
 
