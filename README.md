@@ -1,4 +1,4 @@
-<h1 align="center"> Process-Injection </h1>
+<h1 align="center"> Process Injection </h1>
 
 <p align="center">Selection ➡️ Allocation  ➡️  Injection ➡️  Execution</p>
 
@@ -34,11 +34,14 @@
 <br>
 
 <ins>Process Hollowing (Intermediate)</ins>
-- hundreds of lines of code, requiring the following:
-- manual parsing of PE-payload based on known pointer offsets and field values
-- padding CONTEXT64 struct to ensure correct struct memory-size, and registers at correct offsets
+- hundreds (thousand+) of lines of code
+- manual PE payload parsing, based on known pointer offsets and field values
+- manipulation of CPU register information for given, ensuring correct memory and offset alignment
 - taking snapshot of CPU registers and ensuring Rip and Rsp are perfectly aligned on 16-byte memory boundaries
-- fixing IAT...
+- fixing Import Address Table for required loading of DLL modules (especially for forward-imports)
+- patching PEB to ensure correct pointer to memory address
+- fixing Base Relocation Table to ensure all memory pointers refer to correct address space
+- mapping PE file sections to their relevant memory address
 - too many hacks required to get things perfectly aligned in memory 🫠
 
 <ins>Early Bird Injection (Expert)</ins>
@@ -47,11 +50,11 @@
 
 --------------------------------------------------------------------------------------------------------
 
-Classifying different Process Injection attacks, is typically based on the Execution technique (though not always so obvious).
+Classifying different Process Injection attacks, is typically based on the Execution technique (though not always so obvious)
 
-Trying to categorise/differentiate various techniques that constitute each attack can be difficult, as each stage has numerous techniques that can be mixed and matched in various combinations.
+Trying to categorise/differentiate various techniques that constitute each attack can be difficult, as each stage has numerous techniques that can be mixed and matched in various combinations
 
-It must be useful somehow, I'm just not sure how...
+This information must be actually useful somehow right? I'm just not sure how... 🤷‍♂️
 
 **Waiting Thread Hijacking via Module Stomping**
 
