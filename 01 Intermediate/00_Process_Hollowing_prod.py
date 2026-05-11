@@ -1,6 +1,6 @@
 """
 Note: finally working
-- super messy, don't care, it works
+- super messy, don't care, for now it works
 - will fix up and modularise when time permits
 
 Due to complexity of parsing/mapping PE data to memory structures
@@ -9,7 +9,13 @@ Due to complexity of parsing/mapping PE data to memory structures
 Payload:
 -------
 Paylod examples are short POCs to prove everything works, original source below
-[+] simple_file.cpp - write a file to disk, and genenrated an audible beep sound
+payloads must have simple imports, not complicated forwarded imports, eg
+    -> Resolving imports for api-ms-win-core-sysinfo-l1-1-0.dll...
+[-] IAT api-ms-win-core-sysinfo-l1-1-0.dll -> GetTickCount @ 0x7fffdd3b30d0
+[-] IAT api-ms-win-core-sysinfo-l1-1-0.dll -> GetSystemTimeAsFileTime @ 0x7fffdd3c53a0
+
+
+[Payload] simple_file.cpp - write a file to disk, and genenrated an audible beep sound
 Compile (VS Code -> x64 Native Tools cmd prompt) - cl.exe /MT /GS- /guard:cf- /O2 /Tc simple_file.cpp /link /GUARD:NO /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup kernel32.lib
 
         #include <windows.h>
@@ -27,7 +33,7 @@ Compile (VS Code -> x64 Native Tools cmd prompt) - cl.exe /MT /GS- /guard:cf- /O
             TerminateProcess(GetCurrentProcess(), 0);
         }
 
-[+] simple_msg.cpp - show simple message box
+[Payload] simple_msg.cpp - show simple message box
 Compile (VS Code -> x64 Native Tools cmd prompt) - cl.exe /MT /GS- /O2 /Tc simple_msg.cpp /link /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup user32.lib kernel32.lib
 
         #include <windows.h>
