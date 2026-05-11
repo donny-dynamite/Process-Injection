@@ -321,7 +321,7 @@ def close_handle(handle: wintypes.HANDLE, name: str="Handle") -> None:
 
 
 def create_process(
-    app: str=TARGET_PROCESS
+    app: str=TARGET_PROCESS,
     flags: int==CREATE_SUSPENDED
 ) -> tuple[wintypes.HANDLE, wintypes.HANDLE,
            wintypes.DWORD, wintypes.DWORD]:
