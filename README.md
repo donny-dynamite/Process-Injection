@@ -47,19 +47,24 @@
 
 --------------------------------------------------------------------------------------------------------
 
-Classifying various PI methods is typically based on the Execution technique, though not always so obvious. As such trying to place different techniques/methods can be difficult, as each stage has numerous techniques that can be mixed and matched in various combinations.
+Classifying different Process Injection attacks, is typically based on the Execution technique (though not always so obvious).
 
+Trying to categorise/differentiate various techniques that constitute each attack can be difficult, as each stage has numerous techniques that can be mixed and matched in various combinations.
+
+It must be useful somehow, I'm just not sure how...
 
 **Waiting Thread Hijacking via Module Stomping**
 
-- Allocation -> Module Stomping
-- Injection -> WriteProcessMemory()
-- Execution -> Waiting Thread Hijacking
+- Selection -> NtQuerySystemInformation()
+- Allocation -> buffer.raw.find() + VirtualProtectEx
+- Injection -> WriteProcessMemory(), code-cave
+- Execution -> WriteProcessMemory(), stack
 
 **Classic DLL injection**
 
+- Selection -> CreateProcessW()
 - Allocation -> VirtualAllocEx()
-- Injection -> LoadLibraryW()
+- Injection -> WriteProcessMemory()
 - Execution -> CreateRemoteThread()
 
 
