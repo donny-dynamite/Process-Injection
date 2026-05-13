@@ -38,15 +38,15 @@ This technique requires that the injector (eg python) act as the Windows Loader,
 
 &emsp;Here we have three options, each requiring different FIXES be applied (_see below_):
 
-- the preferred base address of the payload, ```ImageBase```. This is the address the payload 'prefers' to be loaded at in virtual memory. Its value is hard-coded and found in the ```Optional Header``` of the PE file itself, typically ```0x140000000``` for x64 binaries.
+a) the preferred base address of the payload, ```ImageBase```. This is the address the payload 'prefers' to be loaded at in virtual memory. Its value is hard-coded and found in the ```Optional Header``` of the PE file itself, typically ```0x140000000``` for x64 binaries.
 
 &emsp;_**Fix Required:** PEB patching_
 
-- the Base Address of the target process, ```ImageBaseAddress```. This field is found in the PEB (_see below_) and is the starting virtual memory address where the target executable (eg ```notepad.exe```), was originally loaded by the OS.
+b) the Base Address of the target process, ```ImageBaseAddress```. This field is found in the PEB (_see below_) and is the starting virtual memory address where the target executable (eg ```notepad.exe```), was originally loaded by the OS.
 
-&emsp;_**Fix Required:** Base Relocations (if ```ImageBaseAddress``` != ```ImageBase```)_
+&emsp;_**Fix Required:** Base Relocations_
 
-- random address chosen by ```VirtualAllocEx()```. This can be on purpose, where the value  ```0``` is consciously passed as the second argument of the function call. Or when requesting an address, it may already be taken, so another randomly available address is returned instead.
+c) random address chosen by ```VirtualAllocEx()```. This can be on purpose, where the value  ```0``` is consciously passed as the second argument of the function call. Or when requesting an address, it may already be taken, so another randomly available address is returned instead.
 
 &emsp;_**Fix Required:** Base Relocations AND PEB Patching_
 
@@ -61,7 +61,7 @@ This technique requires that the injector (eg python) act as the Windows Loader,
 - as a PE file is injected, it must be manually parsed and its components mapped to their relevant addresses in virtual memory
 - this is due to how a PE, as it exists on-disk, is different to how it exists in-memory (ie, VirtualSize > SizeOfRawData)
 - headers are written first, then followed by the different sections in the ```Section Table```  (eg ```.text```, ```.data```, etc)
-- each section contains a ```VirtualAddress``` value, which is added to the ```Actual Base Address``` (```ImageBase``` from the payload, or ```ImageBaseAddress``` from the process) to determine its absolute location in memory
+- each section contains a ```VirtualAddress``` value, which is added to the ```Actual Base Address``` (```ImageBase``` or ```ImageBaseAddress```) to determine its absolute location in memory
 
 
 <br><h5 align="center"> _**APPLY FIXES**_ </h5>
