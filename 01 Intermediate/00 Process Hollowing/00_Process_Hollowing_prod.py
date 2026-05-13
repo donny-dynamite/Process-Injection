@@ -100,6 +100,9 @@ FIX IAT
 3. Load DLL Locally: Use kernel32.LoadLibraryA in your Python process. (On Windows, system DLLs map to the same address in every process, so the address you find in Python is the same address needed in Notepad).
 4. Resolve Functions: For every function name in that DLL, use kernel32.GetProcAddress.
 5. Patch the Target: Use WriteProcessMemory to write that absolute address into the target’s IAT.
+
+TODO:
+- look into NtGetContextThread / NtSetContextThread
 """
 
 import ctypes
