@@ -50,6 +50,9 @@ c) random address chosen by ```VirtualAllocEx()```. This can be on purpose, wher
 
 &emsp;_**Fix Required:** Base Relocations AND PEB Patching_
 
+<br>
+
+**Either way**, the address returned by ```VirtualAllocEx()```, becomes the ```ActualBaseAddress```, of where the payload is loaded in virtual memory
 
 
 <br><h5 align="center"> [INJECTION] </h5>
@@ -60,8 +63,8 @@ c) random address chosen by ```VirtualAllocEx()```. This can be on purpose, wher
 - the payload is written into the space allocated by ```VirtualAllocEx()```
 - as a PE file is injected, it must be manually parsed and its components mapped to their relevant addresses in virtual memory
 - this is due to how a PE, as it exists on-disk, is different to how it exists in-memory (ie, VirtualSize > SizeOfRawData)
-- headers are written first, then followed by the different sections in the ```Section Table```  (eg ```.text```, ```.data```, etc)
-- each section contains a ```VirtualAddress``` value, which is added to the ```Actual Base Address``` (```ImageBase``` or ```ImageBaseAddress```) to determine its absolute location in memory
+- headers are written first, then followed by the different sections in the ```SectionTable```  (eg ```.text```, ```.data```, etc)
+- each section contains a ```VirtualAddress``` value, which is added to the ```ActualBaseAddress``` (```ImageBase``` or ```ImageBaseAddress```) to determine its absolute location in memory
 
 
 <br><h5 align="center"> _**APPLY FIXES**_ </h5>
@@ -80,19 +83,22 @@ The following fixes are necessary because, in Process Hollowing, we are manually
 - if ```VirtualAllocEx()``` allocated memory at this address, PEB patching is **not**
  required, otherwise the ```ImageBaseAddress``` needs to be updated with the address returned by ```VirtualAllocEx()```
 
+&emsp;**Note:** As noted above (and below), this is the easiest of fixes to apply
+
 <br>
 <br>
 
 6) **Base Relocations:**
 - when a file is compiled, the compiler generates **absolute (fixed)** memory addresses for components such as global variables and string constants
-- these are hard-coded in the binary itself and are based on the default preferred ```ImageBase``` address
+- these are hard-coded in the binary itself and are based on the default Preferred ```ImageBase``` address
 - if instead the payload is mapped at a different address (eg due to ASLR, or in this case Process Hollowing), these hard-coded absolute addresses will point to incorrect or unallocated memory locations
 
 To address this issue, the compiler creates a ```.reloc``` section within the PE file:
+- this ```.reloc``` section contains the ```Base Relocation Table```
 - this is essentially an array of data blocks that map the exact locations of all hard-coded absolute memory addresses within the binary
 - all these pointers must be manually adjusted to their new absolute memory addresses in virtual memory
 
-&emsp;**Authors Note:** this is **not** required **if** image loaded at its preferred ```ImageBase```
+&emsp;**Authors Note:** this is **not** required **if** the payload, is loaded at its Preferred ```ImageBase``` address
 - in the author's honest/lazy opinion, _PEB patching_ is **much easier** to resolve than _Base Relocations_ and is preferable in most circumstances
 - either way, implementation for _Base Relocations_ is included if ever needed
 
@@ -100,17 +106,19 @@ To address this issue, the compiler creates a ```.reloc``` section within the PE
 <br>
 
 7) **IAT Fixing:**
-- the Import Address Table (IAT), acts as an address book that an application (eg payload) uses, to locate/execute functions that belong to external libraries (eg, ```MessageBoxW()``` in ```user32.dll```)
+- the ```Import Address Table``` (```IAT```), acts as an address book that an application (eg payload) uses, to locate/execute functions that belong to external libraries (eg, ```MessageBoxW()``` in ```user32.dll```)
+
+<br>
 
 The IAT exists in two distinct states, the static **on-disk state**, and the dynamic **in-memory state:**
 
 &emsp;**_On-Disk (Static)_**
-- the IAT contains no actual memory addresses, and essentially mirrors the Import Name Table (INT) which is a read-only static lookup table
-- the INT contains pointers to ASCII text strings, or ordinal numbers, that represent the _names_ of functions the payload will need (eg, the string ```"VirtualAllocEx"```)
-- the INT acts as the permanent reference that the OS loader (or injector) reads, to determine _which_ functions the payload is requesting
+- the ```IAT``` contains no actual memory addresses, and essentially mirrors the ```Import Name Table``` (```INT```) which is a read-only static lookup table
+- the ```INT``` contains pointers to ASCII text strings, or ordinal numbers, that represent the _names_ of functions the payload will need (eg, the string ```"VirtualAllocEx"```)
+- the ```INT``` acts as the permanent reference that the OS loader (or injector) reads, to determine _which_ functions the payload is requesting
 
 &emsp;**_In-Memory (Dynamic)_**
-- the state of the IAT changes completely, and its entries are completely over-written
+- the state of the ```IAT``` changes completely, and its entries are completely over-written
 - the original pointers to text strings are now replaced by live, **absolute** virtual memory addresses, that point directly to the functions inside loaded libraries 
 
 <br>
@@ -118,15 +126,12 @@ The IAT exists in two distinct states, the static **on-disk state**, and the dyn
 _**The Process Hollowing Problem**_
 
 Normal operation:
-- normally, a running process will have a valid, initialised in-memory IAT that contains absolute memory addresses of all the functions it requires
-- however as the process was created in a ```SUSPENDED``` state, and the executable image was subsequently unmapped with ```NtUnmapViewOfSection()```, that original IAT of the process is now destroyed
+- normally, a running process will have a valid, initialised in-memory ```IAT``` that contains absolute memory addresses of all the functions it requires
+- however as the process was created in a ```SUSPENDED``` state, and the executable image was subsequently unmapped with ```NtUnmapViewOfSection()```, that original ```IAT``` of the process is now destroyed
 
 Injected payload:
-- the in-memory IAT of the injected payload is initially stale/blank, as it was copied directly from its static, on-disk state (from Step 4)
-- therefore, the in-memory IAT of the payload, must be manually patched and updated with the correct absolute memory addresses of all the functions it requires
-
-
-
+- the in-memory ```IAT`` of the injected payload is initially stale/blank, as it was copied directly from its static, on-disk state (from Step 4)
+- therefore, the in-memory ```IAT``` of the payload, must be manually patched and updated with the correct absolute memory addresses, of all the functions it requires
 
 <br>
 <br>
@@ -135,8 +140,8 @@ Injected payload:
 - the _Thread Context_ is a snapshot that contains the CPU register-values for a thread, at a specific point in time
 - a number of CPU registers will need their values updated, namely the Instruction Pointer ```Rip```, the General Purpose register ```Rcx```, and the Stack Pointer ```Rsp```
 - when a process starts in ```SUSPENDED``` state, the Instruction Pointer (```Rip```) actually points to a function inside ```ntdll.dll```
-- both ```Rip``` and ```Rcx``` must be updated and synchronised to both point to the  **_entry point_** of the payload (```Actual Base Address``` + ```AddressOfEntryPoint``` offset)
-
+- both ```Rip``` and ```Rcx``` must be updated and synchronised to both point to the  **_entry point_** of the payload (```ActualBaseAddress``` + ```AddressOfEntryPoint``` offset)
+- otherwise upon resumption of execution, the process with enter into an incorrect memory address and crash
 
 
 
@@ -145,6 +150,8 @@ Injected payload:
 9) **Resume Thread:** ```ResumeThread()```
 - ```ResumeThread()``` is called, the target process "wakes up" and executes the injected payload
 
+<br>
+<br>
 
 Applied Fixes - In Depth
 -
