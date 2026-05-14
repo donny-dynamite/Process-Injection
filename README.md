@@ -83,7 +83,7 @@ Within a PE file, there is an ```AddressOfEntryPoint``` -> ```OptionalHeader```
 3) Virtual Addresses (VA):
 - variable names will end in ```va``` -> ```actual_entry_point_va```
 - the ```Virtual Address``` is the **absolute/actual** address in virtual memory, where data is located
-- in terms of a payload, the ```Actual Entry Point```, is the ```Actual Base Address``` + ```entry_point_rva```
+- in terms of a payload, the ```actual_entry_point_va``` =  ```actual_base_address_va``` + ```entry_point_rva```
 
 <br><h3 align="center"> **If absolutely none of this makes sense:** </h3>
 
