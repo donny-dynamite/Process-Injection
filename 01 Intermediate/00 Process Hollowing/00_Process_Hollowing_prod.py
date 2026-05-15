@@ -27,6 +27,10 @@ Apply fixes
 TO CONSIDER:
 -------------
 - implement import forwarding
+- look into NtGetContextThread / NtSetContextThread
+
+
+
 
 PAYLOADS:
 ---------
@@ -66,8 +70,10 @@ Compile (VS Code -> x64 Native Tools cmd prompt) - cl.exe /MT /GS- /O2 /Tc simpl
         
             TerminateProcess(GetCurrentProcess(), 0);
         }
-
 """
+
+
+
 
 import ctypes
 from ctypes import wintypes
