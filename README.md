@@ -8,24 +8,27 @@
 
 
 ```
-> ChatGPT, list different injection techniques, and rate them top to bottom
+> Google AI, list different injection techniques, and rate them top to bottom
 ```
+~~(cos ChatGPT seriously sucks)~~
 <br>
 
-| Difficulty   | Technique                   | Description                                                                 |
----------------|-----------------------------|-----------------------------------------------------------------------------|
-| Basic        |✅ DLL Injection            | DLL injected into a target process using standard OS functions              |
-|              |✅ Shellcode Injection      | Shellcode written into another process, executed via new thread             |
-| Intermediate |✅ Process Hollowing           | Start legit process, unmap (hollow-out) its memory, replace with malicious PE file      |
-|              |✅ APC Injection               | Queue malicious code to run when a thread enters an alertable state         |
-|              |✅ Thread Hijacking            | Suspends an existing thread, and re-directs execution                       | 
-| Advanced     | Reflective DLL Injection    | Loads a DLL directly from memory without touching disk                      |
-|              |✅ Manual Mapping              | Fully custom loading of a module into memory (no OS loader)                 |
-|              | Process Doppelganging       | Use NTFS transaction features to run code from a legit-looking process image|
-| Expert       | Process Ghosting            | Similar to Doppelganging, but uses deleted files still mapped in memory     |
-|              |✅ Early Bird Injection        | Inject code before the main thread of a process starts executing            |
-|              | Kernel Assisted Injection   | Uses kernel drivers to inject or malipulate processes                       |
-
+| Generation         | Difficulty    | Technique                    | Description                                                                   |
+|--------------------|---------------|------------------------------|-------------------------------------------------------------------------------|
+| 1) Traditional     |  Basic        |✅ DLL Injection              | DLL injected into a target process using standard OS functions               |
+|                    |               |✅ Shellcode Injection        | Shellcode written into another process, executed via new thread              |
+| 2) Hijacking       |  Intermediate |✅ Process Hollowing          | Start legit process, unmap (hollow-out) its memory, replace with malicious PE file      |
+|                    |               |✅ Thread Hijacking           | Suspends an existing thread, and re-directs execution                       | 
+|                    |               |✅ APC Injection              | Queue malicious code to run when a thread enters an alertable state         |
+|                    |               |✅ Early Bird Injection       | Inject code before the main thread of a process starts executing            |
+| 3) Fileless        | Advanced      | Reflective DLL Injection     | Loads a DLL directly from memory without touching disk                      |
+|                    |               |✅ Manual Mapping            | Fully custom loading of a module into memory (no OS loader)                 |
+| 4) Evasive         | Expert        | Atom Bombing                 | Payload written to Global Atom Table, execution via APC                      |
+|                    |               | Process Doppelganging        | Use NTFS transaction features to run code from a legit-looking process image |
+|                    |               | Process Ghosting             | Similar to Doppelganging, but uses deleted files still mapped in memory      |
+|                    |               | Process Herpaderping         | Modifies on-disk payload, after written to memory, but _before_ execution    |
+|                    |               | Threadless Injection/Hooking | Hijack function calls within a target process, entry points -> jmp to payload  |
+| 5) Kernel          | Adv. Expert   |Kernel Assisted Injection   | Uses kernel drivers to inject or malipulate processes                       |      
 <br>
 
 **Note on table:** Difficulty reflects Evasion & Stealth Capability (how hard it is for security tools to detect). It does **NOT** reflect implementation complexity, for example:
