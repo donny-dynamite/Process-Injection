@@ -20,7 +20,7 @@
 |              |✅ APC Injection               | Queue malicious code to run when a thread enters an alertable state         |
 |              |✅ Thread Hijacking            | Suspends an existing thread, and re-directs execution                       | 
 | Advanced     | Reflective DLL Injection    | Loads a DLL directly from memory without touching disk                      |
-|              | Manual Mapping              | Fully custom loading of a module into memory (no OS loader)                 |
+|              |✅ Manual Mapping              | Fully custom loading of a module into memory (no OS loader)                 |
 |              | Process Doppelganging       | Use NTFS transaction features to run code from a legit-looking process image|
 | Expert       | Process Ghosting            | Similar to Doppelganging, but uses deleted files still mapped in memory     |
 |              |✅ Early Bird Injection        | Inject code before the main thread of a process starts executing            |
