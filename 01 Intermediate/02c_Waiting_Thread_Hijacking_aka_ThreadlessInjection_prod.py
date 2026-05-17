@@ -1,5 +1,5 @@
 """
-(prod) Waiting Thread Hijacking, aka Stack Bombs, Threadless Injection
+(prod) Waiting Thread Hijacking, aka Stack Bombs
 - arch: x64 process/host
 - target: (any process)
 - payload: shellcode [default: spawn MessageBoxW()]
