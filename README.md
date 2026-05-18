@@ -10,7 +10,7 @@
 ```
 > Google AI, list different injection techniques, and rate them top to bottom
 ```
-~~(cos ChatGPT seriously sucks)~~
+
 <br>
 
 | Generation         | Difficulty    | Technique                    | Description                                                                   |
