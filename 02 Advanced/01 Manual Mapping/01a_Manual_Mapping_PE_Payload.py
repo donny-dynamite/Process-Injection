@@ -10,6 +10,9 @@ Notes:
 - similar payload(s) to Process Hollowing, except removal of TerminateProcess() or ExitThread() from source
 - this ensures the target process still runs normally
 
+TODO:
+- vanilla Manual Mapping apparently uses CreateRemoteThread() for execution
+- this seems a little backward, so investigate other potentials (thread hijacking, etc)
 
 Steps:
 ------
